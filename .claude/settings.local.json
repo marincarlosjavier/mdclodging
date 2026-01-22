@@ -1,0 +1,35 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(wc -l \"C:\\\\AgenteAgencias\\\\backend\\\\routes\"*.js)",
+      "Bash(dir C:MotelApp)",
+      "Bash(dir:*)",
+      "Bash(pnpm dev)",
+      "Bash(npm --version)",
+      "Bash(npm install:*)",
+      "Bash(pnpm install)",
+      "Bash(docker-compose up:*)",
+      "Bash(docker exec:*)",
+      "Bash(pnpm migrate:*)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(tasklist:*)",
+      "Bash(curl:*)",
+      "Bash(sc query postgresql*)",
+      "Bash(pnpm list:*)",
+      "Bash(taskkill /F /PID 12044)",
+      "Bash(taskkill //F //PID 12044)",
+      "Bash(timeout /t 5)",
+      "Bash(docker ps:*)",
+      "Bash(docker network:*)",
+      "Bash(docker inspect:*)",
+      "Bash(psql:*)",
+      "Bash(wmic process:*)",
+      "Bash(taskkill //F //PID 4728)",
+      "Bash(node src/database/migrate.js:*)",
+      "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOjEsImVtYWlsIjoiYWRtaW5AZGVtby5jb20iLCJyb2xlIjoiYWRtaW4iLCJ0ZW5hbnRJZCI6MSwiaWF0IjoxNzY5MTEwMDY1LCJleHAiOjE3Njk3MTQ4NjV9.3C-sElO7fXdJ8uH3WdFcqlHd38jMSuC7uLfPsf3b1Uk\":*)",
+      "Bash(git init:*)",
+      "Bash(git add:*)"
+    ]
+  }
+}

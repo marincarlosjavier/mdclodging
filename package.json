@@ -1,0 +1,21 @@
+{
+  "name": "mdclodging",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Multi-tenant Hotel Management System with Telegram Bot",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "pnpm --parallel -r dev",
+    "build": "pnpm -r build",
+    "clean": "pnpm -r clean"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=8.0.0"
+  },
+  "devDependencies": {
+    "pnpm": "^8.15.0"
+  }
+}
