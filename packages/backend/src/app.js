@@ -10,6 +10,7 @@ import taskRoutes from './routes/tasks.js';
 import telegramRoutes from './routes/telegram.js';
 import propertyTypesRoutes from './routes/propertyTypes.js';
 import catalogRoutes from './routes/catalog.js';
+import propertiesRoutes from './routes/properties.js';
 
 // Middleware
 import { errorHandler, notFound } from './middleware/error.js';
@@ -74,6 +75,7 @@ app.use('/api/tasks', taskRoutes);
 app.use('/api/telegram', telegramRoutes);
 app.use('/api/property-types', propertyTypesRoutes);
 app.use('/api/catalog', catalogRoutes);
+app.use('/api/properties', propertiesRoutes);
 
 // 404 handler
 app.use(notFound);

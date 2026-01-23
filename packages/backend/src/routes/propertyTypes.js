@@ -465,4 +465,98 @@ router.delete('/:id', requireAdmin, asyncHandler(async (req, res) => {
   res.json({ message: 'Property type deleted successfully' });
 }));
 
+/**
+ * POST /api/property-types/:id/generate-properties
+ * Generate individual properties based on nomenclature settings
+ */
+router.post('/:id/generate-properties', requireAdmin, asyncHandler(async (req, res) => {
+  const { id } = req.params;
+
+  // Get property type with nomenclature settings
+  const typeResult = await pool.query(
+    `SELECT * FROM property_types
+     WHERE id = $1 AND tenant_id = $2`,
+    [id, req.tenantId]
+  );
+
+  if (typeResult.rows.length === 0) {
+    return res.status(404).json({ error: 'Property type not found' });
+  }
+
+  const propertyType = typeResult.rows[0];
+  const {
+    room_count,
+    room_nomenclature_type,
+    room_nomenclature_prefix,
+    room_nomenclature_start,
+    room_nomenclature_examples
+  } = propertyType;
+
+  // Generate property names based on nomenclature
+  const propertyNames = [];
+
+  if (room_nomenclature_type === 'numeric') {
+    const prefix = room_nomenclature_prefix || '';
+    const start = room_nomenclature_start || 101;
+    for (let i = 0; i < room_count; i++) {
+      propertyNames.push(`${prefix}${start + i}`);
+    }
+  } else if (room_nomenclature_type === 'alphabetic') {
+    const prefix = room_nomenclature_prefix || '';
+    const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    for (let i = 0; i < room_count && i < 26; i++) {
+      propertyNames.push(`${prefix}${letters[i]}`);
+    }
+  } else if (room_nomenclature_type === 'custom') {
+    // Parse custom nomenclature examples
+    if (room_nomenclature_examples) {
+      const names = room_nomenclature_examples.split(',').map(n => n.trim()).filter(n => n);
+      propertyNames.push(...names);
+    }
+  }
+
+  if (propertyNames.length === 0) {
+    return res.status(400).json({ error: 'No property names could be generated' });
+  }
+
+  // Insert properties in batch
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const createdProperties = [];
+    for (const name of propertyNames) {
+      // Check if property with this name already exists
+      const existing = await client.query(
+        'SELECT id FROM properties WHERE tenant_id = $1 AND name = $2',
+        [req.tenantId, name]
+      );
+
+      if (existing.rows.length === 0) {
+        const result = await client.query(
+          `INSERT INTO properties (tenant_id, property_type_id, name, status)
+           VALUES ($1, $2, $3, 'available')
+           RETURNING *`,
+          [req.tenantId, id, name]
+        );
+        createdProperties.push(result.rows[0]);
+      }
+    }
+
+    await client.query('COMMIT');
+
+    res.status(201).json({
+      message: `Successfully generated ${createdProperties.length} properties`,
+      created: createdProperties.length,
+      skipped: propertyNames.length - createdProperties.length,
+      properties: createdProperties
+    });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}));
+
 export default router;
