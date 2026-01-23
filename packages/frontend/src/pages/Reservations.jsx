@@ -4,6 +4,7 @@ import { fetchReservations, createReservation, updateReservation, deleteReservat
 import { fetchProperties } from '../store/slices/propertiesSlice';
 import { Plus, Calendar, Users, Coffee, Edit, Trash2, X, ArrowUpDown } from 'lucide-react';
 import { toast } from 'react-toastify';
+import { getTodayInColombia } from '../utils/timezone';
 
 export default function Reservations() {
   const dispatch = useDispatch();
@@ -141,10 +142,12 @@ export default function Reservations() {
 
   const handleCreate = () => {
     setEditingReservation(null);
-    const today = new Date().toISOString().split('T')[0];
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const tomorrowStr = tomorrow.toISOString().split('T')[0];
+    const today = getTodayInColombia();
+
+    // Calculate tomorrow in Colombia timezone
+    const [year, month, day] = today.split('-').map(Number);
+    const tomorrowDate = new Date(year, month - 1, day + 1);
+    const tomorrowStr = tomorrowDate.toISOString().split('T')[0];
 
     setFormData({
       property_id: '',

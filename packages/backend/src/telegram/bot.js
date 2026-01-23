@@ -662,7 +662,7 @@ function getTaskTypeDisplayName(type) {
 }
 
 function formatDate(date) {
-  return new Date(date).toLocaleString('es-ES');
+  return new Date(date).toLocaleString('es-CO', { timeZone: 'America/Bogota' });
 }
 
 async function handleMyTasks(ctx) {
@@ -781,6 +781,7 @@ export async function notifyCheckout(tenantId, reservationData) {
     const { property_name, actual_checkout_time, adults, children, infants } = reservationData;
     const totalGuests = adults + children + infants;
     const timeStr = new Date(actual_checkout_time).toLocaleTimeString('es-CO', {
+      timeZone: 'America/Bogota',
       hour: '2-digit',
       minute: '2-digit'
     });

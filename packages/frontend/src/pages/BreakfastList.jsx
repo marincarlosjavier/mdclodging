@@ -2,11 +2,12 @@ import { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchBreakfastList } from '../store/slices/reservationsSlice';
 import { Coffee, Calendar, Users, Printer } from 'lucide-react';
+import { getTodayInColombia } from '../utils/timezone';
 
 export default function BreakfastList() {
   const dispatch = useDispatch();
   const { breakfastList, loading } = useSelector((state) => state.reservations);
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState(getTodayInColombia());
 
   useEffect(() => {
     dispatch(fetchBreakfastList(selectedDate));

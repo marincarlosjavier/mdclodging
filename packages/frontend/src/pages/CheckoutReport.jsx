@@ -4,10 +4,11 @@ import { useDispatch } from 'react-redux';
 import { updateReservation } from '../store/slices/reservationsSlice';
 import { toast } from 'react-toastify';
 import api from '../services/api';
+import { getTodayInColombia, createColombiaDateTime, formatColombiaTime } from '../utils/timezone';
 
 export default function CheckoutReport() {
   const dispatch = useDispatch();
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState(getTodayInColombia());
   const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(false);
   const [showCheckoutModal, setShowCheckoutModal] = useState(false);
@@ -43,13 +44,19 @@ export default function CheckoutReport() {
       let actualCheckoutTime;
 
       if (checkoutType === 'now') {
-        actualCheckoutTime = new Date().toISOString();
+        // Get current time in Colombia and convert to ISO
+        actualCheckoutTime = createColombiaDateTime(
+          getTodayInColombia(),
+          new Date().toLocaleTimeString('en-US', {
+            timeZone: 'America/Bogota',
+            hour12: false,
+            hour: '2-digit',
+            minute: '2-digit'
+          })
+        );
       } else {
-        // Combine date with scheduled time
-        const [hours, minutes] = scheduledTime.split(':');
-        const checkoutDate = new Date(date);
-        checkoutDate.setHours(parseInt(hours), parseInt(minutes), 0, 0);
-        actualCheckoutTime = checkoutDate.toISOString();
+        // Use the selected date and time in Colombia timezone
+        actualCheckoutTime = createColombiaDateTime(date, scheduledTime);
       }
 
       await dispatch(updateReservation({
@@ -110,9 +117,7 @@ export default function CheckoutReport() {
   };
 
   const formatTime = (timeString) => {
-    if (!timeString) return '-';
-    const date = new Date(timeString);
-    return date.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
+    return formatColombiaTime(timeString, { hour: '2-digit', minute: '2-digit' });
   };
 
   const handlePrint = () => {
