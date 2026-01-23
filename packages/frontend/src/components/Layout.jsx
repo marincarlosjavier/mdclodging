@@ -14,7 +14,8 @@ import {
   List,
   Calendar,
   ClipboardList,
-  Coffee
+  Coffee,
+  FileText
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -37,6 +38,7 @@ export default function Layout() {
           { path: '/property-types', label: 'Tipos de Propiedad', icon: Building2 },
           { path: '/properties', label: 'Propiedades', icon: Building2 },
           { path: '/reservations', label: 'Reservas', icon: Calendar },
+          { path: '/checkout-report', label: 'Reporte de Checkouts', icon: FileText },
           { path: '/catalog', label: 'Catálogo', icon: List },
           { path: '/users', label: 'Usuarios', icon: Users },
           { path: '/telegram', label: 'Telegram', icon: MessageCircle }

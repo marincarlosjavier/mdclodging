@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchReservations, createReservation, updateReservation, deleteReservation } from '../store/slices/reservationsSlice';
 import { fetchProperties } from '../store/slices/propertiesSlice';
-import { Plus, Calendar, Users, Coffee, Edit, Trash2, X, ArrowUpDown } from 'lucide-react';
+import { Plus, Calendar, Users, Coffee, Edit, Trash2, X, ArrowUpDown, LogOut } from 'lucide-react';
 import { toast } from 'react-toastify';
 
 export default function Reservations() {
@@ -26,6 +26,8 @@ export default function Reservations() {
     additional_requirements: '',
     notes: ''
   });
+  const [showCheckoutModal, setShowCheckoutModal] = useState(false);
+  const [checkoutReservation, setCheckoutReservation] = useState(null);
 
   useEffect(() => {
     dispatch(fetchReservations());
@@ -115,6 +117,27 @@ export default function Reservations() {
     try {
       await dispatch(deleteReservation(id)).unwrap();
       toast.success('Reserva cancelada correctamente');
+      dispatch(fetchReservations());
+    } catch (error) {
+      // Error already handled by interceptor
+    }
+  };
+
+  const handleReportCheckout = (reservation) => {
+    setCheckoutReservation(reservation);
+    setShowCheckoutModal(true);
+  };
+
+  const handleConfirmCheckout = async () => {
+    try {
+      const actualCheckoutTime = new Date().toISOString();
+      await dispatch(updateReservation({
+        id: checkoutReservation.id,
+        data: { actual_checkout_time: actualCheckoutTime }
+      })).unwrap();
+      toast.success('Checkout reportado correctamente. Notificación enviada a housekeeping.');
+      setShowCheckoutModal(false);
+      setCheckoutReservation(null);
       dispatch(fetchReservations());
     } catch (error) {
       // Error already handled by interceptor
@@ -373,6 +396,15 @@ export default function Reservations() {
                     </span>
                   </td>
                   <td className="px-6 py-4 text-right space-x-2">
+                    {reservation.status === 'active' && !reservation.actual_checkout_time && (
+                      <button
+                        onClick={() => handleReportCheckout(reservation)}
+                        className="text-green-600 hover:text-green-800"
+                        title="Reportar Checkout"
+                      >
+                        <LogOut className="w-4 h-4" />
+                      </button>
+                    )}
                     <button
                       onClick={() => handleEdit(reservation)}
                       className="text-blue-600 hover:text-blue-800"
@@ -630,6 +662,67 @@ export default function Reservations() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Checkout Confirmation Modal */}
+      {showCheckoutModal && checkoutReservation && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          {/* Backdrop */}
+          <div className="fixed inset-0 bg-black bg-opacity-50" onClick={() => setShowCheckoutModal(false)} />
+
+          {/* Modal */}
+          <div className="flex items-center justify-center min-h-screen p-4">
+            <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+              {/* Modal Header */}
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-bold text-gray-900">Confirmar Checkout</h2>
+                <button onClick={() => setShowCheckoutModal(false)} className="text-gray-400 hover:text-gray-600">
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+
+              {/* Modal Body */}
+              <div className="space-y-4">
+                <div className="p-4 bg-blue-50 rounded-lg">
+                  <p className="text-sm text-gray-700">
+                    <span className="font-semibold">Propiedad:</span> {checkoutReservation.property_name}
+                  </p>
+                  <p className="text-sm text-gray-700 mt-1">
+                    <span className="font-semibold">Checkout programado:</span> {checkoutReservation.checkout_time || 'No especificado'}
+                  </p>
+                </div>
+
+                <p className="text-gray-700">
+                  ¿Confirmas que el huésped ha reportado su salida en este momento?
+                </p>
+
+                <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                  <p className="text-sm text-yellow-800">
+                    ⚠️ Esto creará una tarea de limpieza pendiente y notificará al equipo de housekeeping vía Telegram.
+                  </p>
+                </div>
+              </div>
+
+              {/* Modal Actions */}
+              <div className="flex justify-end space-x-3 mt-6">
+                <button
+                  type="button"
+                  onClick={() => setShowCheckoutModal(false)}
+                  className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleConfirmCheckout}
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2"
+                >
+                  <LogOut className="w-4 h-4" />
+                  Confirmar Checkout
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

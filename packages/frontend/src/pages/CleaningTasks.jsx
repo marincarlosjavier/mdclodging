@@ -1,8 +1,49 @@
 import { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchTodaysTasks, fetchCleaningTasks, startCleaningTask, completeCleaningTask, updateCleaningTask } from '../store/slices/cleaningTasksSlice';
-import { Clock, CheckCircle2, Play, Filter, User } from 'lucide-react';
+import { Clock, CheckCircle2, Play, Filter, User, Timer } from 'lucide-react';
 import { toast } from 'react-toastify';
+
+// Timer component to show elapsed time since checkout was reported
+function ElapsedTimer({ startTime, endTime }) {
+  const [elapsed, setElapsed] = useState('');
+
+  useEffect(() => {
+    const calculateElapsed = () => {
+      const start = new Date(startTime);
+      const end = endTime ? new Date(endTime) : new Date();
+      const diffMs = end - start;
+      const diffMins = Math.floor(diffMs / 60000);
+      const hours = Math.floor(diffMins / 60);
+      const mins = diffMins % 60;
+
+      if (hours > 0) {
+        return `${hours}h ${mins}m`;
+      } else {
+        return `${mins}m`;
+      }
+    };
+
+    setElapsed(calculateElapsed());
+
+    if (!endTime) {
+      const interval = setInterval(() => {
+        setElapsed(calculateElapsed());
+      }, 60000); // Update every minute
+
+      return () => clearInterval(interval);
+    }
+  }, [startTime, endTime]);
+
+  const isUrgent = !endTime && (new Date() - new Date(startTime)) > 30 * 60000; // > 30 minutes
+
+  return (
+    <div className={`flex items-center gap-1 text-xs ${isUrgent ? 'text-red-600 font-semibold' : 'text-gray-600'}`}>
+      <Timer className="w-3 h-3" />
+      <span>{elapsed} {!endTime && 'esperando'}</span>
+    </div>
+  );
+}
 
 export default function CleaningTasks() {
   const dispatch = useDispatch();
@@ -109,6 +150,18 @@ export default function CleaningTasks() {
           <div className="flex items-center text-sm text-gray-600 mb-3">
             <User className="w-4 h-4 mr-1" />
             <span>Asignado a: {task.assigned_to_name}</span>
+          </div>
+        )}
+
+        {task.checkout_reported_at && (
+          <div className="mb-3 p-2 bg-yellow-50 rounded border border-yellow-200">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-yellow-800">Checkout reportado:</span>
+              <ElapsedTimer
+                startTime={task.checkout_reported_at}
+                endTime={task.assigned_at}
+              />
+            </div>
           </div>
         )}
 

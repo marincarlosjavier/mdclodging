@@ -756,3 +756,53 @@ async function handlePinLogin(ctx, pin) {
   ctx.reply('✅ Acceso concedido.');
   await showMainMenu(ctx, contact);
 }
+
+/**
+ * Send notification to housekeeping staff when checkout is reported
+ */
+export async function notifyCheckout(tenantId, reservationData) {
+  if (!bot) {
+    console.warn('⚠️ Telegram bot not running, cannot send checkout notification');
+    return;
+  }
+
+  try {
+    // Get all housekeeping staff telegram IDs for this tenant
+    const result = await pool.query(
+      `SELECT DISTINCT tc.telegram_id
+       FROM telegram_contacts tc
+       JOIN users u ON u.id = tc.user_id
+       WHERE u.tenant_id = $1
+         AND u.role IN ('cleaner', 'supervisor', 'admin')
+         AND tc.is_linked = true`,
+      [tenantId]
+    );
+
+    const { property_name, actual_checkout_time, adults, children, infants } = reservationData;
+    const totalGuests = adults + children + infants;
+    const timeStr = new Date(actual_checkout_time).toLocaleTimeString('es-CO', {
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+
+    const message =
+      `🚪 *Checkout Reportado*\n\n` +
+      `🏨 Propiedad: ${property_name}\n` +
+      `⏰ Hora: ${timeStr}\n` +
+      `👥 Huéspedes: ${totalGuests}\n\n` +
+      `📋 Se ha creado una tarea de limpieza pendiente.`;
+
+    // Send notification to all housekeeping staff
+    for (const row of result.rows) {
+      try {
+        await bot.telegram.sendMessage(row.telegram_id, message, { parse_mode: 'Markdown' });
+      } catch (err) {
+        console.error(`Failed to send notification to ${row.telegram_id}:`, err.message);
+      }
+    }
+
+    console.log(`✅ Checkout notification sent to ${result.rows.length} staff members`);
+  } catch (error) {
+    console.error('Error sending checkout notification:', error);
+  }
+}

@@ -2,6 +2,7 @@ import express from 'express';
 import { pool } from '../config/database.js';
 import { authenticate, requireRole } from '../middleware/auth.js';
 import { asyncHandler } from '../middleware/error.js';
+import { notifyCheckout } from '../telegram/bot.js';
 
 const router = express.Router();
 router.use(authenticate);
@@ -92,6 +93,49 @@ router.get('/', asyncHandler(async (req, res) => {
 
   const result = await pool.query(query, params);
   res.json(result.rows);
+}));
+
+// GET /api/reservations/checkout-report - Get daily checkout report
+router.get('/checkout-report', asyncHandler(async (req, res) => {
+  const { date } = req.query;
+  const targetDate = date || new Date().toISOString().split('T')[0];
+
+  const result = await pool.query(
+    `SELECT
+      r.id,
+      r.check_out_date,
+      r.checkout_time,
+      r.actual_checkout_time,
+      r.adults,
+      r.children,
+      r.infants,
+      r.status as reservation_status,
+      p.name as property_name,
+      pt.name as property_type_name,
+      ct.id as cleaning_task_id,
+      ct.status as cleaning_status,
+      ct.checkout_reported_at,
+      ct.assigned_to,
+      ct.assigned_at,
+      ct.completed_at,
+      u.full_name as assigned_to_name
+     FROM reservations r
+     LEFT JOIN properties p ON r.property_id = p.id
+     LEFT JOIN property_types pt ON p.property_type_id = pt.id
+     LEFT JOIN cleaning_tasks ct ON ct.reservation_id = r.id AND ct.task_type = 'check_out'
+     LEFT JOIN users u ON u.id = ct.assigned_to
+     WHERE r.tenant_id = $1
+       AND r.check_out_date = $2
+       AND r.status = 'active'
+     ORDER BY r.checkout_time, r.actual_checkout_time, p.name`,
+    [req.tenantId, targetDate]
+  );
+
+  res.json({
+    date: targetDate,
+    total_checkouts: result.rows.length,
+    checkouts: result.rows
+  });
 }));
 
 // GET /api/reservations/breakfast-list - Get today's breakfast list
@@ -241,6 +285,7 @@ router.put('/:id', requireRole('admin', 'supervisor'), asyncHandler(async (req, 
     check_in_date,
     check_out_date,
     checkout_time,
+    actual_checkout_time,
     adults,
     children,
     infants,
@@ -250,30 +295,95 @@ router.put('/:id', requireRole('admin', 'supervisor'), asyncHandler(async (req, 
     status
   } = req.body;
 
-  const result = await pool.query(
-    `UPDATE reservations
-     SET property_id = COALESCE($1, property_id),
-         check_in_date = COALESCE($2, check_in_date),
-         check_out_date = COALESCE($3, check_out_date),
-         checkout_time = COALESCE($4, checkout_time),
-         adults = COALESCE($5, adults),
-         children = COALESCE($6, children),
-         infants = COALESCE($7, infants),
-         has_breakfast = COALESCE($8, has_breakfast),
-         additional_requirements = COALESCE($9, additional_requirements),
-         notes = COALESCE($10, notes),
-         status = COALESCE($11, status),
-         updated_at = CURRENT_TIMESTAMP
-     WHERE id = $12 AND tenant_id = $13
-     RETURNING *`,
-    [property_id, check_in_date, check_out_date, checkout_time, adults, children, infants, has_breakfast, additional_requirements, notes, status, id, req.tenantId]
-  );
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
 
-  if (result.rows.length === 0) {
-    return res.status(404).json({ error: 'Reservation not found' });
+    // Get current reservation to check if actual_checkout_time is being newly set
+    const currentResult = await client.query(
+      'SELECT *, p.name as property_name FROM reservations r LEFT JOIN properties p ON p.id = r.property_id WHERE r.id = $1 AND r.tenant_id = $2',
+      [id, req.tenantId]
+    );
+
+    if (currentResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Reservation not found' });
+    }
+
+    const currentReservation = currentResult.rows[0];
+    const isCheckoutReported = actual_checkout_time && !currentReservation.actual_checkout_time;
+
+    // Update reservation
+    const result = await client.query(
+      `UPDATE reservations
+       SET property_id = COALESCE($1, property_id),
+           check_in_date = COALESCE($2, check_in_date),
+           check_out_date = COALESCE($3, check_out_date),
+           checkout_time = COALESCE($4, checkout_time),
+           actual_checkout_time = COALESCE($5, actual_checkout_time),
+           adults = COALESCE($6, adults),
+           children = COALESCE($7, children),
+           infants = COALESCE($8, infants),
+           has_breakfast = COALESCE($9, has_breakfast),
+           additional_requirements = COALESCE($10, additional_requirements),
+           notes = COALESCE($11, notes),
+           status = COALESCE($12, status),
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $13 AND tenant_id = $14
+       RETURNING *`,
+      [property_id, check_in_date, check_out_date, checkout_time, actual_checkout_time, adults, children, infants, has_breakfast, additional_requirements, notes, status, id, req.tenantId]
+    );
+
+    const updatedReservation = result.rows[0];
+
+    // If checkout was just reported, create/update cleaning task
+    if (isCheckoutReported) {
+      // Check if check_out cleaning task exists
+      const taskCheck = await client.query(
+        `SELECT id FROM cleaning_tasks
+         WHERE reservation_id = $1 AND task_type = 'check_out'`,
+        [id]
+      );
+
+      if (taskCheck.rows.length > 0) {
+        // Update existing task
+        await client.query(
+          `UPDATE cleaning_tasks
+           SET status = 'pending',
+               checkout_reported_at = NOW(),
+               updated_at = CURRENT_TIMESTAMP
+           WHERE id = $1`,
+          [taskCheck.rows[0].id]
+        );
+      } else {
+        // Create new checkout cleaning task
+        await client.query(
+          `INSERT INTO cleaning_tasks (
+            tenant_id, property_id, reservation_id, task_type,
+            scheduled_date, status, checkout_reported_at
+          ) VALUES ($1, $2, $3, 'check_out', $4, 'pending', NOW())`,
+          [req.tenantId, updatedReservation.property_id, id, new Date()]
+        );
+      }
+
+      // Send Telegram notification to housekeeping staff
+      await notifyCheckout(req.tenantId, {
+        property_name: currentReservation.property_name,
+        actual_checkout_time,
+        adults: updatedReservation.adults,
+        children: updatedReservation.children,
+        infants: updatedReservation.infants
+      });
+    }
+
+    await client.query('COMMIT');
+    res.json(updatedReservation);
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
   }
-
-  res.json(result.rows[0]);
 }));
 
 // DELETE /api/reservations/:id - Cancel reservation

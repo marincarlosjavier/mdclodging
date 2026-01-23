@@ -214,6 +214,7 @@ router.patch('/:id/start', asyncHandler(async (req, res) => {
     `UPDATE cleaning_tasks
      SET status = 'in_progress',
          assigned_to = COALESCE(assigned_to, $1),
+         assigned_at = COALESCE(assigned_at, NOW()),
          updated_at = CURRENT_TIMESTAMP
      WHERE id = $2 AND tenant_id = $3
      RETURNING *`,
