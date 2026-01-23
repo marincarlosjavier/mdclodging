@@ -15,7 +15,8 @@ import {
   Calendar,
   ClipboardList,
   Coffee,
-  FileText
+  FileText,
+  DoorOpen
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -38,6 +39,7 @@ export default function Layout() {
           { path: '/property-types', label: 'Tipos de Propiedad', icon: Building2 },
           { path: '/properties', label: 'Propiedades', icon: Building2 },
           { path: '/reservations', label: 'Reservas', icon: Calendar },
+          { path: '/checkin-report', label: 'Preparación Check-ins', icon: DoorOpen },
           { path: '/checkout-report', label: 'Reporte de Checkouts', icon: FileText },
           { path: '/catalog', label: 'Catálogo', icon: List },
           { path: '/users', label: 'Usuarios', icon: Users },

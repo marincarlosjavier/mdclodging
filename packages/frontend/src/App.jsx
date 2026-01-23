@@ -13,6 +13,7 @@ import Reservations from './pages/Reservations';
 import CleaningTasks from './pages/CleaningTasks';
 import BreakfastList from './pages/BreakfastList';
 import CheckoutReport from './pages/CheckoutReport';
+import CheckinReport from './pages/CheckinReport';
 import Layout from './components/Layout';
 
 // Protected Route Component
@@ -98,6 +99,14 @@ function App() {
           element={
             <ProtectedRoute allowedRoles={['admin', 'supervisor']}>
               <CheckoutReport />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="checkin-report"
+          element={
+            <ProtectedRoute allowedRoles={['admin', 'supervisor', 'staff']}>
+              <CheckinReport />
             </ProtectedRoute>
           }
         />
