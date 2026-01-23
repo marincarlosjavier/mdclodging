@@ -17,6 +17,7 @@ export default function Reservations() {
     property_id: '',
     check_in_date: '',
     check_out_date: '',
+    checkout_time: '12:00',
     adults: 1,
     children: 0,
     infants: 0,
@@ -126,6 +127,7 @@ export default function Reservations() {
       property_id: reservation.property_id,
       check_in_date: reservation.check_in_date,
       check_out_date: reservation.check_out_date,
+      checkout_time: reservation.checkout_time || '12:00',
       adults: reservation.adults,
       children: reservation.children,
       infants: reservation.infants,
@@ -148,6 +150,7 @@ export default function Reservations() {
       property_id: '',
       check_in_date: today,
       check_out_date: tomorrowStr,
+      checkout_time: '12:00',
       adults: 1,
       children: 0,
       infants: 0,
@@ -436,6 +439,23 @@ export default function Reservations() {
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
+              </div>
+
+              {/* Checkout Time */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Hora de Check-out
+                </label>
+                <input
+                  type="time"
+                  name="checkout_time"
+                  value={formData.checkout_time}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Hora estimada de salida del huésped
+                </p>
               </div>
 
               {/* Property Selection */}
