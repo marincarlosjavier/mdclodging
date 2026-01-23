@@ -224,6 +224,7 @@ export default function CheckoutReport() {
             <tr>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Propiedad</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Hora Programada</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Hora Reportada</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase print:hidden">Asignado A</th>
               <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase print:hidden">Acciones</th>
@@ -252,6 +253,16 @@ export default function CheckoutReport() {
                       )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
+                      {checkout.assigned_at ? (
+                        <div className="flex items-center gap-2 text-green-700 font-medium">
+                          <CheckCircle className="w-4 h-4" />
+                          {formatTime(checkout.assigned_at)}
+                        </div>
+                      ) : (
+                        <span className="text-gray-400">-</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
                       {getStatusBadge(checkout.cleaning_status)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 print:hidden">
@@ -274,7 +285,7 @@ export default function CheckoutReport() {
               })
             ) : (
               <tr>
-                <td colSpan="5" className="px-6 py-12 text-center text-gray-500">
+                <td colSpan="6" className="px-6 py-12 text-center text-gray-500">
                   No hay checkouts programados para esta fecha
                 </td>
               </tr>
