@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useDispatch } from 'react-redux';
 import { createPropertyType, updatePropertyType, fetchPropertyTypeById } from '../../store/slices/propertyTypesSlice';
 import { fetchCatalogItems, createCatalogItem } from '../../store/slices/catalogSlice';
-import { X, Plus, Trash2, ChevronRight, ChevronLeft } from 'lucide-react';
+import { X, Plus, Trash2, ChevronRight, ChevronLeft, Bed, Home } from 'lucide-react';
 import { toast } from 'react-toastify';
 
 // Helper function to generate unit names based on nomenclature settings
@@ -442,7 +442,7 @@ export default function PropertyTypeModal({ type, onClose }) {
         {/* Progress Steps */}
         <div className="px-6 py-4 border-b border-gray-200">
           <div className="flex items-center justify-between">
-            {['Información Básica', 'Habitaciones', 'Espacios Comunes', 'Revisión'].map((label, index) => (
+            {['Configuración', 'Habitaciones', 'Áreas Comunes', 'Revisión'].map((label, index) => (
               <div key={index} className="flex items-center">
                 <div
                   className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
@@ -467,60 +467,69 @@ export default function PropertyTypeModal({ type, onClose }) {
         {/* Content */}
         <div className="flex-1 overflow-y-auto px-6 py-6">
           <form onSubmit={handleSubmit}>
-            {/* Step 1: Basic Info */}
+            {/* Step 1: Configuración */}
             {step === 1 && (
-              <div className="space-y-4">
+              <div className="space-y-6">
+                {/* Información Básica */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Nombre del Tipo *
-                  </label>
-                  <input
-                    type="text"
-                    name="name"
-                    value={formData.name}
-                    onChange={handleChange}
-                    required
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
-                    placeholder="Ej: Apartamento Estándar, Habitación Doble..."
-                  />
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Información Básica</h3>
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Nombre del Tipo *
+                        </label>
+                        <input
+                          type="text"
+                          name="name"
+                          value={formData.name}
+                          onChange={handleChange}
+                          required
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
+                          placeholder="Ej: Apartamento Estándar"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Categoría *
+                        </label>
+                        <select
+                          name="property_category"
+                          value={formData.property_category}
+                          onChange={handleChange}
+                          required
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
+                        >
+                          <option value="hotel_room">Habitación Hotel</option>
+                          <option value="apartment">Apartamento</option>
+                          <option value="house">Casa</option>
+                          <option value="suite">Suite</option>
+                          <option value="other">Otro</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Descripción
+                      </label>
+                      <textarea
+                        name="description"
+                        value={formData.description}
+                        onChange={handleChange}
+                        rows={2}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
+                        placeholder="Descripción breve..."
+                      />
+                    </div>
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Categoría *
-                  </label>
-                  <select
-                    name="property_category"
-                    value={formData.property_category}
-                    onChange={handleChange}
-                    required
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
-                  >
-                    <option value="hotel_room">Habitación Hotel</option>
-                    <option value="apartment">Apartamento</option>
-                    <option value="house">Casa</option>
-                    <option value="suite">Suite</option>
-                    <option value="other">Otro</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Descripción
-                  </label>
-                  <textarea
-                    name="description"
-                    value={formData.description}
-                    onChange={handleChange}
-                    rows={3}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
-                    placeholder="Descripción detallada del tipo de propiedad..."
-                  />
-                </div>
-
-                <div className="border-t pt-4 mt-4">
-                  <h4 className="font-medium text-gray-900 mb-4">Ubicación</h4>
-                  <p className="text-sm text-gray-500 mb-3">
+                {/* Ubicación */}
+                <div className="border-t pt-6">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Ubicación</h3>
+                  <p className="text-sm text-gray-600 mb-4">
                     Selecciona desde el catálogo o crea uno nuevo con el botón +
                   </p>
 
@@ -639,8 +648,9 @@ export default function PropertyTypeModal({ type, onClose }) {
                   </div>
                 </div>
 
-                <div className="border-t pt-4 mt-4">
-                  <h4 className="font-medium text-gray-900 mb-4">Nomenclatura de Habitaciones</h4>
+                {/* Cantidad de Unidades y Nomenclatura */}
+                <div className="border-t pt-6">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Cantidad de Unidades y Nomenclatura</h3>
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
@@ -762,31 +772,37 @@ export default function PropertyTypeModal({ type, onClose }) {
               </div>
             )}
 
-            {/* Step 2: Rooms */}
+            {/* Step 2: Habitaciones (Cuartos) */}
             {step === 2 && (
               <div className="space-y-4">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-medium text-gray-900">Habitaciones</h3>
-                  <button
-                    type="button"
-                    onClick={handleAddRoom}
-                    className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition"
-                  >
-                    <Plus size={16} />
-                    Agregar Habitación
-                  </button>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Habitaciones (Dormitorios)</h3>
+                  <p className="text-sm text-gray-600 mb-4">
+                    Configura las habitaciones/dormitorios que tiene este tipo de propiedad
+                  </p>
                 </div>
 
+                <button
+                  type="button"
+                  onClick={handleAddRoom}
+                  className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition"
+                >
+                  <Plus size={16} />
+                  Agregar Habitación
+                </button>
+
                 {formData.rooms.length === 0 ? (
-                  <div className="text-center py-8 text-gray-500">
-                    No hay habitaciones agregadas. Haz clic en "Agregar Habitación" para comenzar.
+                  <div className="text-center py-12 text-gray-500 border-2 border-dashed border-gray-300 rounded-lg">
+                    <Bed className="mx-auto mb-3 text-gray-400" size={48} />
+                    <p>No hay habitaciones agregadas</p>
+                    <p className="text-sm mt-1">Haz clic en "Agregar Habitación" para comenzar</p>
                   </div>
                 ) : (
-                  <div className="space-y-6">
+                  <div className="space-y-4">
                     {formData.rooms.map((room, roomIndex) => (
-                      <div key={roomIndex} className="border border-gray-200 rounded-lg p-4">
+                      <div key={roomIndex} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
                         <div className="flex items-center justify-between mb-4">
-                          <h4 className="font-medium text-gray-900">Habitación {roomIndex + 1}</h4>
+                          <h4 className="font-semibold text-gray-900">Habitación {roomIndex + 1}</h4>
                           <button
                             type="button"
                             onClick={() => handleRemoveRoom(roomIndex)}
@@ -799,14 +815,15 @@ export default function PropertyTypeModal({ type, onClose }) {
                         <div className="space-y-4">
                           <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
-                              Nombre de Habitación
+                              Nombre *
                             </label>
                             <input
                               type="text"
                               value={room.room_name}
                               onChange={(e) => handleRoomChange(roomIndex, 'room_name', e.target.value)}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
-                              placeholder="Ej: Habitación Principal, Dormitorio 1..."
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none bg-white"
+                              placeholder="Ej: Habitación Principal, Dormitorio 1"
+                              required
                             />
                           </div>
 
@@ -827,11 +844,11 @@ export default function PropertyTypeModal({ type, onClose }) {
                             </div>
 
                             {(!room.beds || room.beds.length === 0) ? (
-                              <p className="text-sm text-gray-500 italic">No hay camas agregadas</p>
+                              <p className="text-sm text-gray-500 italic py-2">Sin camas</p>
                             ) : (
                               <div className="space-y-2">
                                 {room.beds.map((bed, bedIndex) => (
-                                  <div key={bedIndex} className="flex items-center gap-2 bg-gray-50 p-2 rounded">
+                                  <div key={bedIndex} className="flex items-center gap-2 bg-white p-2 rounded border border-gray-200">
                                     <select
                                       value={bed.type}
                                       onChange={(e) => handleBedChange(roomIndex, bedIndex, 'type', e.target.value)}
@@ -864,139 +881,19 @@ export default function PropertyTypeModal({ type, onClose }) {
                             )}
                           </div>
 
-                          {/* Linens Section - Toallas */}
+                          {/* Baño Attached */}
                           <div className="border-t pt-3">
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                              Toallas por Defecto
-                            </label>
-                            <div className="grid grid-cols-3 gap-3">
-                              <div>
-                                <label className="block text-xs text-gray-600 mb-1">Baño</label>
-                                <input
-                                  type="number"
-                                  min="0"
-                                  value={room.default_bath_towels || 0}
-                                  onChange={(e) => handleRoomChange(roomIndex, 'default_bath_towels', parseInt(e.target.value) || 0)}
-                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
-                                />
-                              </div>
-                              <div>
-                                <label className="block text-xs text-gray-600 mb-1">Mano</label>
-                                <input
-                                  type="number"
-                                  min="0"
-                                  value={room.default_hand_towels || 0}
-                                  onChange={(e) => handleRoomChange(roomIndex, 'default_hand_towels', parseInt(e.target.value) || 0)}
-                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
-                                />
-                              </div>
-                              <div>
-                                <label className="block text-xs text-gray-600 mb-1">Piso</label>
-                                <input
-                                  type="number"
-                                  min="0"
-                                  value={room.default_bath_mats || 0}
-                                  onChange={(e) => handleRoomChange(roomIndex, 'default_bath_mats', parseInt(e.target.value) || 0)}
-                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
-                                />
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Almohadas */}
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                              Almohadas por Defecto
-                            </label>
-                            <div className="grid grid-cols-2 gap-3">
-                              <div>
-                                <label className="block text-xs text-gray-600 mb-1">Estándar</label>
-                                <input
-                                  type="number"
-                                  min="0"
-                                  value={room.default_standard_pillows || 0}
-                                  onChange={(e) => handleRoomChange(roomIndex, 'default_standard_pillows', parseInt(e.target.value) || 0)}
-                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
-                                />
-                              </div>
-                              <div>
-                                <label className="block text-xs text-gray-600 mb-1">Decorativas</label>
-                                <input
-                                  type="number"
-                                  min="0"
-                                  value={room.default_decorative_pillows || 0}
-                                  onChange={(e) => handleRoomChange(roomIndex, 'default_decorative_pillows', parseInt(e.target.value) || 0)}
-                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
-                                />
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Other Linens */}
-                          <div className="grid grid-cols-2 gap-3">
-                            <div>
-                              <label className="block text-xs text-gray-600 mb-1">Juegos de Sábanas</label>
+                            <label className="flex items-center gap-2 cursor-pointer">
                               <input
-                                type="number"
-                                min="0"
-                                value={room.default_sheets_sets || 0}
-                                onChange={(e) => handleRoomChange(roomIndex, 'default_sheets_sets', parseInt(e.target.value) || 0)}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
+                                type="checkbox"
+                                checked={room.has_bathroom || false}
+                                onChange={(e) => handleRoomChange(roomIndex, 'has_bathroom', e.target.checked)}
+                                className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
                               />
-                            </div>
-                            <div>
-                              <label className="block text-xs text-gray-600 mb-1">Cobijas/Cubrecamas</label>
-                              <input
-                                type="number"
-                                min="0"
-                                value={room.default_blankets || 0}
-                                onChange={(e) => handleRoomChange(roomIndex, 'default_blankets', parseInt(e.target.value) || 0)}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
-                              />
-                            </div>
-                          </div>
-
-                          {/* Amenities */}
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">Amenidades</label>
-                            <div className="grid grid-cols-2 gap-2">
-                              <label className="flex items-center gap-2">
-                                <input
-                                  type="checkbox"
-                                  checked={room.has_bathroom || false}
-                                  onChange={(e) => handleRoomChange(roomIndex, 'has_bathroom', e.target.checked)}
-                                  className="rounded border-gray-300"
-                                />
-                                <span className="text-sm">Baño</span>
-                              </label>
-                              <label className="flex items-center gap-2">
-                                <input
-                                  type="checkbox"
-                                  checked={room.has_tv || false}
-                                  onChange={(e) => handleRoomChange(roomIndex, 'has_tv', e.target.checked)}
-                                  className="rounded border-gray-300"
-                                />
-                                <span className="text-sm">TV</span>
-                              </label>
-                              <label className="flex items-center gap-2">
-                                <input
-                                  type="checkbox"
-                                  checked={room.has_closet || false}
-                                  onChange={(e) => handleRoomChange(roomIndex, 'has_closet', e.target.checked)}
-                                  className="rounded border-gray-300"
-                                />
-                                <span className="text-sm">Closet</span>
-                              </label>
-                              <label className="flex items-center gap-2">
-                                <input
-                                  type="checkbox"
-                                  checked={room.has_air_conditioning || false}
-                                  onChange={(e) => handleRoomChange(roomIndex, 'has_air_conditioning', e.target.checked)}
-                                  className="rounded border-gray-300"
-                                />
-                                <span className="text-sm">Aire Acondicionado</span>
-                              </label>
-                            </div>
+                              <span className="text-sm font-medium text-gray-700">
+                                Tiene baño privado
+                              </span>
+                            </label>
                           </div>
                         </div>
                       </div>
@@ -1006,31 +903,37 @@ export default function PropertyTypeModal({ type, onClose }) {
               </div>
             )}
 
-            {/* Step 3: Spaces - Keep existing */}
+            {/* Step 3: Áreas Comunes */}
             {step === 3 && (
               <div className="space-y-4">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-medium text-gray-900">Espacios Comunes</h3>
-                  <button
-                    type="button"
-                    onClick={handleAddSpace}
-                    className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition"
-                  >
-                    <Plus size={16} />
-                    Agregar Espacio
-                  </button>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Áreas Comunes</h3>
+                  <p className="text-sm text-gray-600 mb-4">
+                    Configura las áreas comunes como cocina, sala, comedor, baños, patio, etc.
+                  </p>
                 </div>
 
+                <button
+                  type="button"
+                  onClick={handleAddSpace}
+                  className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition"
+                >
+                  <Plus size={16} />
+                  Agregar Área
+                </button>
+
                 {formData.spaces.length === 0 ? (
-                  <div className="text-center py-8 text-gray-500">
-                    No hay espacios agregados. Haz clic en "Agregar Espacio" para comenzar.
+                  <div className="text-center py-12 text-gray-500 border-2 border-dashed border-gray-300 rounded-lg">
+                    <Home className="mx-auto mb-3 text-gray-400" size={48} />
+                    <p>No hay áreas comunes agregadas</p>
+                    <p className="text-sm mt-1">Haz clic en "Agregar Área" para comenzar</p>
                   </div>
                 ) : (
                   <div className="space-y-4">
                     {formData.spaces.map((space, index) => (
-                      <div key={index} className="border border-gray-200 rounded-lg p-4">
+                      <div key={index} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
                         <div className="flex items-center justify-between mb-4">
-                          <h4 className="font-medium text-gray-900">Espacio {index + 1}</h4>
+                          <h4 className="font-semibold text-gray-900">Área {index + 1}</h4>
                           <button
                             type="button"
                             onClick={() => handleRemoveSpace(index)}
@@ -1040,20 +943,22 @@ export default function PropertyTypeModal({ type, onClose }) {
                           </button>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-4">
                           <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
-                              Tipo de Espacio
+                              Tipo de Área *
                             </label>
                             <select
                               value={space.space_type}
                               onChange={(e) => handleSpaceChange(index, 'space_type', e.target.value)}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none bg-white"
+                              required
                             >
                               <option value="kitchen">Cocina</option>
                               <option value="living_room">Sala</option>
                               <option value="dining_room">Comedor</option>
-                              <option value="terrace">Terraza</option>
+                              <option value="bathroom">Baño</option>
+                              <option value="terrace">Terraza/Patio</option>
                               <option value="balcony">Balcón</option>
                               <option value="laundry">Lavandería</option>
                               <option value="other">Otro</option>
