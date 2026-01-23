@@ -224,9 +224,8 @@ export default function CheckoutReport() {
             <tr>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Propiedad</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Hora Programada</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Hora Real</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Huéspedes</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado Limpieza</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Hora Reportada</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase print:hidden">Asignado A</th>
               <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase print:hidden">Acciones</th>
             </tr>
@@ -251,19 +250,13 @@ export default function CheckoutReport() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       {checkout.actual_checkout_time ? (
-                        <div className="flex items-center gap-2 text-green-700 font-medium">
+                        <div className="flex items-center gap-2 text-blue-700 font-medium">
                           <CheckCircle className="w-4 h-4" />
                           {formatTime(checkout.actual_checkout_time)}
                         </div>
                       ) : (
-                        <span className="text-gray-400">No reportado</span>
+                        <span className="text-gray-400">-</span>
                       )}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center gap-2 text-gray-700">
-                        <Users className="w-4 h-4" />
-                        {totalGuests}
-                      </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       {getStatusBadge(checkout.cleaning_status)}
@@ -288,7 +281,7 @@ export default function CheckoutReport() {
               })
             ) : (
               <tr>
-                <td colSpan="7" className="px-6 py-12 text-center text-gray-500">
+                <td colSpan="6" className="px-6 py-12 text-center text-gray-500">
                   No hay checkouts programados para esta fecha
                 </td>
               </tr>

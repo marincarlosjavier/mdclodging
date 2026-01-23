@@ -95,6 +95,45 @@ router.get('/', asyncHandler(async (req, res) => {
   res.json(result.rows);
 }));
 
+// GET /api/reservations/checkin-report - Get daily check-in report
+router.get('/checkin-report', asyncHandler(async (req, res) => {
+  const { date } = req.query;
+  const targetDate = date || new Date().toISOString().split('T')[0];
+
+  const result = await pool.query(
+    `SELECT
+      r.id,
+      r.check_in_date,
+      r.check_out_date,
+      r.checkout_time,
+      r.adults,
+      r.children,
+      r.infants,
+      r.has_breakfast,
+      r.additional_requirements,
+      r.notes,
+      r.status as reservation_status,
+      p.id as property_id,
+      p.name as property_name,
+      pt.id as property_type_id,
+      pt.name as property_type_name
+     FROM reservations r
+     LEFT JOIN properties p ON r.property_id = p.id
+     LEFT JOIN property_types pt ON p.property_type_id = pt.id
+     WHERE r.tenant_id = $1
+       AND r.check_in_date = $2
+       AND r.status = 'active'
+     ORDER BY r.check_in_date, p.name`,
+    [req.tenantId, targetDate]
+  );
+
+  res.json({
+    date: targetDate,
+    total_checkins: result.rows.length,
+    checkins: result.rows
+  });
+}));
+
 // GET /api/reservations/checkout-report - Get daily checkout report
 router.get('/checkout-report', asyncHandler(async (req, res) => {
   const { date } = req.query;
