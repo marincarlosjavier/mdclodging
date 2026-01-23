@@ -32,6 +32,7 @@ export default function Layout() {
     ...(user?.role === 'admin' || user?.role === 'supervisor'
       ? [
           { path: '/property-types', label: 'Tipos de Propiedad', icon: Building2 },
+          { path: '/properties', label: 'Propiedades', icon: Building2 },
           { path: '/catalog', label: 'Catálogo', icon: List },
           { path: '/users', label: 'Usuarios', icon: Users },
           { path: '/telegram', label: 'Telegram', icon: MessageCircle }

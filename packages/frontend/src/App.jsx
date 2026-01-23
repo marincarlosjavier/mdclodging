@@ -7,6 +7,7 @@ import Users from './pages/Users';
 import Telegram from './pages/Telegram';
 import Settings from './pages/Settings';
 import PropertyTypes from './pages/PropertyTypes';
+import Properties from './pages/Properties';
 import Catalog from './pages/Catalog';
 import Layout from './components/Layout';
 
@@ -53,6 +54,14 @@ function App() {
           element={
             <ProtectedRoute allowedRoles={['admin', 'supervisor']}>
               <PropertyTypes />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="properties"
+          element={
+            <ProtectedRoute allowedRoles={['admin', 'supervisor']}>
+              <Properties />
             </ProtectedRoute>
           }
         />
