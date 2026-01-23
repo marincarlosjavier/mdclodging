@@ -11,7 +11,10 @@ import {
   Menu,
   X,
   Building2,
-  List
+  List,
+  Calendar,
+  ClipboardList,
+  Coffee
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -33,11 +36,14 @@ export default function Layout() {
       ? [
           { path: '/property-types', label: 'Tipos de Propiedad', icon: Building2 },
           { path: '/properties', label: 'Propiedades', icon: Building2 },
+          { path: '/reservations', label: 'Reservas', icon: Calendar },
           { path: '/catalog', label: 'Catálogo', icon: List },
           { path: '/users', label: 'Usuarios', icon: Users },
           { path: '/telegram', label: 'Telegram', icon: MessageCircle }
         ]
       : []),
+    { path: '/cleaning-tasks', label: 'Tareas de Limpieza', icon: ClipboardList },
+    { path: '/breakfast-list', label: 'Lista de Desayunos', icon: Coffee },
     ...(user?.role === 'admin'
       ? [{ path: '/settings', label: 'Configuración', icon: Settings }]
       : [])

@@ -9,6 +9,9 @@ import Settings from './pages/Settings';
 import PropertyTypes from './pages/PropertyTypes';
 import Properties from './pages/Properties';
 import Catalog from './pages/Catalog';
+import Reservations from './pages/Reservations';
+import CleaningTasks from './pages/CleaningTasks';
+import BreakfastList from './pages/BreakfastList';
 import Layout from './components/Layout';
 
 // Protected Route Component
@@ -62,6 +65,30 @@ function App() {
           element={
             <ProtectedRoute allowedRoles={['admin', 'supervisor']}>
               <Properties />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="reservations"
+          element={
+            <ProtectedRoute allowedRoles={['admin', 'supervisor']}>
+              <Reservations />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="cleaning-tasks"
+          element={
+            <ProtectedRoute allowedRoles={['admin', 'supervisor', 'staff']}>
+              <CleaningTasks />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="breakfast-list"
+          element={
+            <ProtectedRoute allowedRoles={['admin', 'supervisor', 'staff']}>
+              <BreakfastList />
             </ProtectedRoute>
           }
         />

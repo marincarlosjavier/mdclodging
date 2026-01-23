@@ -128,3 +128,25 @@ export const propertiesAPI = {
   delete: (id) => api.delete(`/properties/${id}`),
   generateFromType: (typeId) => api.post(`/property-types/${typeId}/generate-properties`)
 };
+
+// Reservations API
+export const reservationsAPI = {
+  getAll: (params) => api.get('/reservations', { params }),
+  getById: (id) => api.get(`/reservations/${id}`),
+  create: (data) => api.post('/reservations', data),
+  update: (id, data) => api.put(`/reservations/${id}`, data),
+  delete: (id) => api.delete(`/reservations/${id}`),
+  getBreakfastList: (date) => api.get('/reservations/breakfast-list', { params: { date } })
+};
+
+// Cleaning Tasks API
+export const cleaningTasksAPI = {
+  getAll: (params) => api.get('/cleaning-tasks', { params }),
+  getToday: () => api.get('/cleaning-tasks/today'),
+  getById: (id) => api.get(`/cleaning-tasks/${id}`),
+  create: (data) => api.post('/cleaning-tasks', data),
+  update: (id, data) => api.put(`/cleaning-tasks/${id}`, data),
+  delete: (id) => api.delete(`/cleaning-tasks/${id}`),
+  start: (id) => api.patch(`/cleaning-tasks/${id}/start`),
+  complete: (id, notes) => api.patch(`/cleaning-tasks/${id}/complete`, { notes })
+};

@@ -5,6 +5,8 @@ import usersReducer from './slices/usersSlice';
 import propertyTypesReducer from './slices/propertyTypesSlice';
 import catalogReducer from './slices/catalogSlice';
 import propertiesReducer from './slices/propertiesSlice';
+import reservationsReducer from './slices/reservationsSlice';
+import cleaningTasksReducer from './slices/cleaningTasksSlice';
 
 const store = configureStore({
   reducer: {
@@ -13,7 +15,9 @@ const store = configureStore({
     users: usersReducer,
     propertyTypes: propertyTypesReducer,
     catalog: catalogReducer,
-    properties: propertiesReducer
+    properties: propertiesReducer,
+    reservations: reservationsReducer,
+    cleaningTasks: cleaningTasksReducer
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({
