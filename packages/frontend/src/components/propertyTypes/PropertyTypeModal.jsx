@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useDispatch } from 'react-redux';
 import { createPropertyType, updatePropertyType, fetchPropertyTypeById } from '../../store/slices/propertyTypesSlice';
+import { fetchCatalogItems } from '../../store/slices/catalogSlice';
 import { X, Plus, Trash2, ChevronRight, ChevronLeft } from 'lucide-react';
 import { toast } from 'react-toastify';
 
@@ -29,14 +30,19 @@ export default function PropertyTypeModal({ type, onClose }) {
   const dispatch = useDispatch();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
+  const [catalogItems, setCatalogItems] = useState({
+    departments: [],
+    cities: [],
+    zones: []
+  });
 
   const [formData, setFormData] = useState({
     name: '',
     description: '',
     property_category: 'apartment',
-    department: '',
-    city: '',
-    zone: '',
+    department_id: '',
+    city_id: '',
+    zone_id: '',
     room_count: 1,
     room_nomenclature_type: 'numeric',
     room_nomenclature_prefix: '',
@@ -46,6 +52,29 @@ export default function PropertyTypeModal({ type, onClose }) {
     rooms: [],
     spaces: []
   });
+
+  // Load catalog items on mount
+  useEffect(() => {
+    const loadCatalogItems = async () => {
+      try {
+        const [departmentsRes, citiesRes, zonesRes] = await Promise.all([
+          dispatch(fetchCatalogItems({ category: 'location', type: 'department' })).unwrap(),
+          dispatch(fetchCatalogItems({ category: 'location', type: 'city' })).unwrap(),
+          dispatch(fetchCatalogItems({ category: 'location', type: 'zone' })).unwrap()
+        ]);
+
+        setCatalogItems({
+          departments: departmentsRes,
+          cities: citiesRes,
+          zones: zonesRes
+        });
+      } catch (error) {
+        console.error('Error loading catalog items:', error);
+      }
+    };
+
+    loadCatalogItems();
+  }, [dispatch]);
 
   useEffect(() => {
     if (type?.id) {
@@ -67,9 +96,9 @@ export default function PropertyTypeModal({ type, onClose }) {
             name: data.name || '',
             description: data.description || '',
             property_category: data.property_category || 'apartment',
-            department: data.department || '',
-            city: data.city || '',
-            zone: data.zone || '',
+            department_id: data.department_id || '',
+            city_id: data.city_id || '',
+            zone_id: data.zone_id || '',
             room_count: data.room_count || 1,
             room_nomenclature_type: data.room_nomenclature_type || 'numeric',
             room_nomenclature_prefix: data.room_nomenclature_prefix || '',
@@ -417,48 +446,66 @@ export default function PropertyTypeModal({ type, onClose }) {
 
                 <div className="border-t pt-4 mt-4">
                   <h4 className="font-medium text-gray-900 mb-4">Ubicación</h4>
+                  <p className="text-sm text-gray-500 mb-3">
+                    Selecciona desde el catálogo. Si no existe, créalo en la sección "Catálogo"
+                  </p>
 
                   <div className="grid grid-cols-3 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Departamento
                       </label>
-                      <input
-                        type="text"
-                        name="department"
-                        value={formData.department}
+                      <select
+                        name="department_id"
+                        value={formData.department_id}
                         onChange={handleChange}
                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
-                        placeholder="Ej: Cesar, La Guajira..."
-                      />
+                      >
+                        <option value="">Seleccionar...</option>
+                        {catalogItems.departments.map((item) => (
+                          <option key={item.id} value={item.id}>
+                            {item.name}
+                          </option>
+                        ))}
+                      </select>
                     </div>
 
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Ciudad
                       </label>
-                      <input
-                        type="text"
-                        name="city"
-                        value={formData.city}
+                      <select
+                        name="city_id"
+                        value={formData.city_id}
                         onChange={handleChange}
                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
-                        placeholder="Ej: Valledupar, Riohacha..."
-                      />
+                      >
+                        <option value="">Seleccionar...</option>
+                        {catalogItems.cities.map((item) => (
+                          <option key={item.id} value={item.id}>
+                            {item.name}
+                          </option>
+                        ))}
+                      </select>
                     </div>
 
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Edificio/Zona
                       </label>
-                      <input
-                        type="text"
-                        name="zone"
-                        value={formData.zone}
+                      <select
+                        name="zone_id"
+                        value={formData.zone_id}
                         onChange={handleChange}
                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
-                        placeholder="Ej: Edificio Villa Olímpica..."
-                      />
+                      >
+                        <option value="">Seleccionar...</option>
+                        {catalogItems.zones.map((item) => (
+                          <option key={item.id} value={item.id}>
+                            {item.name}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                   </div>
                 </div>

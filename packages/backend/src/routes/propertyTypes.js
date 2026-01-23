@@ -18,8 +18,14 @@ router.get('/', asyncHandler(async (req, res) => {
   let query = `
     SELECT pt.*,
       (SELECT COUNT(*) FROM property_type_rooms WHERE property_type_id = pt.id) as room_count,
-      (SELECT COUNT(*) FROM property_type_spaces WHERE property_type_id = pt.id) as space_count
+      (SELECT COUNT(*) FROM property_type_spaces WHERE property_type_id = pt.id) as space_count,
+      dept.name as department,
+      city.name as city,
+      zone.name as zone
     FROM property_types pt
+    LEFT JOIN catalog_items dept ON pt.department_id = dept.id
+    LEFT JOIN catalog_items city ON pt.city_id = city.id
+    LEFT JOIN catalog_items zone ON pt.zone_id = zone.id
     WHERE pt.tenant_id = $1
   `;
   const params = [req.tenantId];
@@ -52,7 +58,15 @@ router.get('/:id', asyncHandler(async (req, res) => {
 
   const [typeResult, roomsResult, spacesResult] = await Promise.all([
     pool.query(
-      'SELECT * FROM property_types WHERE id = $1 AND tenant_id = $2',
+      `SELECT pt.*,
+        dept.name as department_name,
+        city.name as city_name,
+        zone.name as zone_name
+       FROM property_types pt
+       LEFT JOIN catalog_items dept ON pt.department_id = dept.id
+       LEFT JOIN catalog_items city ON pt.city_id = city.id
+       LEFT JOIN catalog_items zone ON pt.zone_id = zone.id
+       WHERE pt.id = $1 AND pt.tenant_id = $2`,
       [id, req.tenantId]
     ),
     pool.query(
@@ -100,9 +114,9 @@ router.post('/', requireAdmin, asyncHandler(async (req, res) => {
     name,
     description,
     property_category,
-    department,
-    city,
-    zone,
+    department_id,
+    city_id,
+    zone_id,
     room_count,
     room_nomenclature_type,
     room_nomenclature_prefix,
@@ -125,7 +139,7 @@ router.post('/', requireAdmin, asyncHandler(async (req, res) => {
     const typeResult = await client.query(
       `INSERT INTO property_types (
         tenant_id, name, description, property_category,
-        department, city, zone,
+        department_id, city_id, zone_id,
         room_count, room_nomenclature_type, room_nomenclature_prefix,
         room_nomenclature_start, room_nomenclature_examples
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
@@ -134,9 +148,9 @@ router.post('/', requireAdmin, asyncHandler(async (req, res) => {
         name,
         description,
         property_category,
-        department || null,
-        city || null,
-        zone || null,
+        department_id || null,
+        city_id || null,
+        zone_id || null,
         room_count || 1,
         room_nomenclature_type || 'numeric',
         room_nomenclature_prefix || '',
@@ -260,9 +274,9 @@ router.put('/:id', requireAdmin, asyncHandler(async (req, res) => {
     description,
     property_category,
     is_active,
-    department,
-    city,
-    zone,
+    department_id,
+    city_id,
+    zone_id,
     room_count,
     room_nomenclature_type,
     room_nomenclature_prefix,
@@ -292,7 +306,7 @@ router.put('/:id', requireAdmin, asyncHandler(async (req, res) => {
       `UPDATE property_types
        SET name = $1, description = $2, property_category = $3,
            is_active = $4,
-           department = $5, city = $6, zone = $7,
+           department_id = $5, city_id = $6, zone_id = $7,
            room_count = $8,
            room_nomenclature_type = $9,
            room_nomenclature_prefix = $10,
@@ -305,9 +319,9 @@ router.put('/:id', requireAdmin, asyncHandler(async (req, res) => {
         description,
         property_category,
         is_active !== undefined ? is_active : true,
-        department || null,
-        city || null,
-        zone || null,
+        department_id || null,
+        city_id || null,
+        zone_id || null,
         room_count || 1,
         room_nomenclature_type || 'numeric',
         room_nomenclature_prefix || '',

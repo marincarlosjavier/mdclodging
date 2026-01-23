@@ -29,7 +29,9 @@
       "Bash(node src/database/migrate.js:*)",
       "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOjEsImVtYWlsIjoiYWRtaW5AZGVtby5jb20iLCJyb2xlIjoiYWRtaW4iLCJ0ZW5hbnRJZCI6MSwiaWF0IjoxNzY5MTEwMDY1LCJleHAiOjE3Njk3MTQ4NjV9.3C-sElO7fXdJ8uH3WdFcqlHd38jMSuC7uLfPsf3b1Uk\":*)",
       "Bash(git init:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git config:*)"
     ]
   }
 }
