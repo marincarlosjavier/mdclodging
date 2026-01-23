@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchReservations, createReservation, updateReservation, deleteReservation } from '../store/slices/reservationsSlice';
 import { fetchProperties } from '../store/slices/propertiesSlice';
-import { Plus, Calendar, Users, Coffee, Edit, Trash2, X } from 'lucide-react';
+import { Plus, Calendar, Users, Coffee, Edit, Trash2, X, ArrowUpDown } from 'lucide-react';
 import { toast } from 'react-toastify';
 
 export default function Reservations() {
@@ -11,6 +11,8 @@ export default function Reservations() {
   const { properties } = useSelector((state) => state.properties);
   const [showModal, setShowModal] = useState(false);
   const [editingReservation, setEditingReservation] = useState(null);
+  const [sortColumn, setSortColumn] = useState('check_in_date');
+  const [sortDirection, setSortDirection] = useState('desc');
   const [formData, setFormData] = useState({
     property_id: '',
     check_in_date: '',
@@ -19,6 +21,7 @@ export default function Reservations() {
     children: 0,
     infants: 0,
     has_breakfast: false,
+    status: 'active',
     additional_requirements: '',
     notes: ''
   });
@@ -27,6 +30,84 @@ export default function Reservations() {
     dispatch(fetchReservations());
     dispatch(fetchProperties());
   }, [dispatch]);
+
+  const handleSort = (column) => {
+    if (sortColumn === column) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortColumn(column);
+      setSortDirection('asc');
+    }
+  };
+
+  const getSortedReservations = () => {
+    const sorted = [...reservations].sort((a, b) => {
+      let aValue, bValue;
+
+      switch (sortColumn) {
+        case 'property_name':
+          aValue = a.property_name || '';
+          bValue = b.property_name || '';
+          break;
+        case 'check_in_date':
+          aValue = new Date(a.check_in_date);
+          bValue = new Date(b.check_in_date);
+          break;
+        case 'check_out_date':
+          aValue = new Date(a.check_out_date);
+          bValue = new Date(b.check_out_date);
+          break;
+        case 'status':
+          aValue = a.status || '';
+          bValue = b.status || '';
+          break;
+        default:
+          return 0;
+      }
+
+      if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
+      if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+    return sorted;
+  };
+
+  const getAvailableProperties = () => {
+    if (!formData.check_in_date || !formData.check_out_date) {
+      return properties.filter(p => p.is_active);
+    }
+
+    // Filter out properties that are already reserved for the selected dates
+    return properties.filter(p => {
+      if (!p.is_active) return false;
+
+      // If editing, allow the same property
+      if (editingReservation && p.id === editingReservation.property_id) return true;
+
+      // Check if property has overlapping reservations
+      const hasOverlap = reservations.some(r => {
+        // Skip cancelled reservations and the current reservation being edited
+        if (r.status === 'cancelled') return false;
+        if (editingReservation && r.id === editingReservation.id) return false;
+        if (r.property_id !== p.id) return false;
+
+        const rCheckIn = new Date(r.check_in_date);
+        const rCheckOut = new Date(r.check_out_date);
+        const newCheckIn = new Date(formData.check_in_date);
+        const newCheckOut = new Date(formData.check_out_date);
+
+        // Check for overlap
+        return (
+          (newCheckIn <= rCheckIn && newCheckOut > rCheckIn) ||
+          (newCheckIn < rCheckOut && newCheckOut >= rCheckOut) ||
+          (newCheckIn >= rCheckIn && newCheckOut <= rCheckOut)
+        );
+      });
+
+      return !hasOverlap;
+    });
+  };
 
   const handleDelete = async (id) => {
     if (!confirm('¿Estás seguro de cancelar esta reserva? Esto también cancelará las tareas de limpieza asociadas.')) return;
@@ -49,6 +130,7 @@ export default function Reservations() {
       children: reservation.children,
       infants: reservation.infants,
       has_breakfast: reservation.has_breakfast,
+      status: reservation.status,
       additional_requirements: reservation.additional_requirements || '',
       notes: reservation.notes || ''
     });
@@ -70,6 +152,7 @@ export default function Reservations() {
       children: 0,
       infants: 0,
       has_breakfast: false,
+      status: 'active',
       additional_requirements: '',
       notes: ''
     });
@@ -146,6 +229,21 @@ export default function Reservations() {
     return Math.ceil(diff / (1000 * 60 * 60 * 24));
   };
 
+  const SortableHeader = ({ column, children }) => (
+    <th
+      onClick={() => handleSort(column)}
+      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100 select-none"
+    >
+      <div className="flex items-center space-x-1">
+        <span>{children}</span>
+        <ArrowUpDown className="w-3 h-3" />
+      </div>
+    </th>
+  );
+
+  const availableProperties = getAvailableProperties();
+  const sortedReservations = getSortedReservations();
+
   return (
     <div className="p-6">
       {/* Header */}
@@ -209,13 +307,13 @@ export default function Reservations() {
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Propiedad</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Check-in</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Check-out</th>
+              <SortableHeader column="property_name">Propiedad</SortableHeader>
+              <SortableHeader column="check_in_date">Check-in</SortableHeader>
+              <SortableHeader column="check_out_date">Check-out</SortableHeader>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Noches</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Huéspedes</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Desayuno</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
+              <SortableHeader column="status">Estado</SortableHeader>
               <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Acciones</th>
             </tr>
           </thead>
@@ -226,14 +324,14 @@ export default function Reservations() {
                   Cargando...
                 </td>
               </tr>
-            ) : reservations.length === 0 ? (
+            ) : sortedReservations.length === 0 ? (
               <tr>
                 <td colSpan="8" className="px-6 py-4 text-center text-gray-500">
                   No hay reservas registradas
                 </td>
               </tr>
             ) : (
-              reservations.map((reservation) => (
+              sortedReservations.map((reservation) => (
                 <tr key={reservation.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4">
                     <div className="text-sm font-medium text-gray-900">{reservation.property_name}</div>
@@ -310,30 +408,7 @@ export default function Reservations() {
 
             {/* Modal Body */}
             <form onSubmit={handleSubmit} className="p-6 space-y-4">
-              {/* Property Selection */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Propiedad *
-                </label>
-                <select
-                  name="property_id"
-                  value={formData.property_id}
-                  onChange={handleChange}
-                  required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">Seleccionar propiedad</option>
-                  {properties
-                    .filter(p => p.is_active && p.status === 'available')
-                    .map((property) => (
-                      <option key={property.id} value={property.id}>
-                        {property.name} - {property.type_name}
-                      </option>
-                    ))}
-                </select>
-              </div>
-
-              {/* Dates */}
+              {/* Dates - FIRST */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -361,6 +436,37 @@ export default function Reservations() {
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
+              </div>
+
+              {/* Property Selection */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Propiedad *
+                  {formData.check_in_date && formData.check_out_date && (
+                    <span className="text-xs text-gray-500 ml-2">
+                      ({availableProperties.length} disponibles)
+                    </span>
+                  )}
+                </label>
+                <select
+                  name="property_id"
+                  value={formData.property_id}
+                  onChange={handleChange}
+                  required
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Seleccionar propiedad</option>
+                  {availableProperties.map((property) => (
+                    <option key={property.id} value={property.id}>
+                      {property.name} - {property.type_name}
+                    </option>
+                  ))}
+                </select>
+                {formData.check_in_date && formData.check_out_date && availableProperties.length === 0 && (
+                  <p className="text-xs text-red-500 mt-1">
+                    No hay propiedades disponibles para estas fechas
+                  </p>
+                )}
               </div>
 
               {/* Guest Counts */}
@@ -405,6 +511,25 @@ export default function Reservations() {
                   />
                 </div>
               </div>
+
+              {/* Status (only show when editing) */}
+              {editingReservation && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Estado
+                  </label>
+                  <select
+                    name="status"
+                    value={formData.status}
+                    onChange={handleChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="active">Activa</option>
+                    <option value="completed">Completada</option>
+                    <option value="cancelled">Cancelada</option>
+                  </select>
+                </div>
+              )}
 
               {/* Breakfast */}
               <div className="flex items-center">
