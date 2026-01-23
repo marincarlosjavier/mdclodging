@@ -3,6 +3,7 @@ import { pool } from '../config/database.js';
 import bcrypt from 'bcryptjs';
 
 let bot = null;
+let lastError = null; // Store last error for status reporting
 const userSessions = new Map(); // Store user sessions { telegramId: {state, data} }
 
 /**
@@ -15,16 +16,46 @@ export function getBotInstance(tenantId) {
 }
 
 /**
+ * Check if bot is currently running
+ */
+export function isBotRunning() {
+  return bot !== null;
+}
+
+/**
+ * Get last error message
+ */
+export function getLastError() {
+  return lastError;
+}
+
+/**
+ * Clear last error
+ */
+export function clearLastError() {
+  lastError = null;
+}
+
+/**
  * Start Telegram bot
  */
 export async function startTelegramBot() {
+  // Check if bot is already running
+  if (bot) {
+    console.log('⚠️  Telegram bot is already running');
+    return bot;
+  }
+
   // Get bot token from first active tenant (or default)
   const tokenResult = await pool.query(
-    `SELECT t.id, ss.setting_value as token, ss2.setting_value as username
+    `SELECT t.id,
+            ss_token.setting_value as token,
+            ss_username.setting_value as username
      FROM tenants t
-     JOIN system_settings ss ON ss.tenant_id = t.id AND ss.setting_key = 'telegram_bot_token'
-     JOIN system_settings ss2 ON ss2.tenant_id = t.id AND ss2.setting_key = 'telegram_bot_enabled'
-     WHERE ss2.setting_value = 'true' AND ss.setting_value != ''
+     JOIN system_settings ss_token ON ss_token.tenant_id = t.id AND ss_token.setting_key = 'telegram_bot_token'
+     JOIN system_settings ss_enabled ON ss_enabled.tenant_id = t.id AND ss_enabled.setting_key = 'telegram_bot_enabled'
+     LEFT JOIN system_settings ss_username ON ss_username.tenant_id = t.id AND ss_username.setting_key = 'telegram_bot_username'
+     WHERE ss_enabled.setting_value = 'true' AND ss_token.setting_value != ''
      LIMIT 1`
   );
 
@@ -51,6 +82,18 @@ export async function startTelegramBot() {
 
       // Get user session
       ctx.session = userSessions.get(ctx.telegramId.toString()) || {};
+
+      // Check if user is linked and active (except for /start command)
+      if (ctx.updateType !== 'callback_query' && ctx.message?.text !== '/start') {
+        if (contact.user_id && !contact.is_active) {
+          return ctx.reply(
+            '⛔ *Acceso Desactivado*\n\n' +
+            'Tu acceso al bot ha sido desactivado.\n\n' +
+            'Por favor contacta a tu supervisor si crees que esto es un error.',
+            { parse_mode: 'Markdown' }
+          );
+        }
+      }
     }
 
     await next();
@@ -79,8 +122,30 @@ export async function startTelegramBot() {
   });
 
   // Launch bot
-  await bot.launch();
-  console.log('✅ Telegram bot started successfully');
+  try {
+    await bot.launch();
+    console.log('✅ Telegram bot started successfully');
+
+    // Log bot info
+    const botInfo = await bot.telegram.getMe();
+    console.log(`   Bot username: @${botInfo.username}`);
+    console.log(`   Bot ID: ${botInfo.id}`);
+
+    // Clear any previous errors
+    lastError = null;
+  } catch (error) {
+    console.error('❌ Failed to launch bot:', error.message);
+
+    // Store error for status reporting
+    if (error.response && error.response.description) {
+      lastError = `${error.response.error_code}: ${error.response.description}`;
+    } else {
+      lastError = error.message;
+    }
+
+    bot = null;
+    throw error;
+  }
 
   // Graceful shutdown
   process.once('SIGINT', () => bot.stop('SIGINT'));
@@ -165,7 +230,17 @@ async function handleStart(ctx) {
     );
   }
 
-  // Linked and has PIN - show main menu
+  // Check if contact is active
+  if (!contact.is_active) {
+    return ctx.reply(
+      '⛔ *Acceso Desactivado*\n\n' +
+      'Tu acceso al bot ha sido desactivado.\n\n' +
+      'Por favor contacta a tu supervisor si crees que esto es un error.',
+      { parse_mode: 'Markdown' }
+    );
+  }
+
+  // Linked, has PIN, and is active - show main menu
   await showMainMenu(ctx, contact);
 }
 

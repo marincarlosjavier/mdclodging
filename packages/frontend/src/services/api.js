@@ -98,7 +98,16 @@ export const telegramAPI = {
   getLinkCodes: () => api.get('/telegram/link-codes'),
   revokeLinkCode: (id) => api.delete(`/telegram/link-codes/${id}`),
   unlinkContact: (id) => api.put(`/telegram/contacts/${id}/unlink`),
-  resetPin: (id) => api.put(`/telegram/contacts/${id}/reset-pin`)
+  resetPin: (id) => api.put(`/telegram/contacts/${id}/reset-pin`),
+  activateContact: (id) => api.put(`/telegram/contacts/${id}/activate`),
+  deactivateContact: (id) => api.put(`/telegram/contacts/${id}/deactivate`),
+  updateContactRole: (id, roles) => api.put(`/telegram/contacts/${id}/role`, { roles }),
+  updateUserRole: (userId, roles) => api.put(`/telegram/users/${userId}/role`, { roles }),
+  getPermissionsCatalog: (all = false) => api.get(`/telegram/permissions-catalog${all ? '?all=true' : ''}`),
+  createPermission: (data) => api.post('/telegram/permissions-catalog', data),
+  updatePermission: (id, data) => api.put(`/telegram/permissions-catalog/${id}`, data),
+  deletePermission: (id) => api.delete(`/telegram/permissions-catalog/${id}`),
+  updateContactPermissions: (id, permission_ids) => api.put(`/telegram/contacts/${id}/permissions`, { permission_ids })
 };
 
 // Property Types API

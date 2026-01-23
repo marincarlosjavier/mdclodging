@@ -16,7 +16,8 @@ import {
   ClipboardList,
   Coffee,
   FileText,
-  DoorOpen
+  DoorOpen,
+  Shield
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -31,10 +32,16 @@ export default function Layout() {
     navigate('/login');
   };
 
+  // Helper to check if user has any of the specified roles
+  const hasRole = (...roles) => {
+    const userRoles = Array.isArray(user?.role) ? user.role : [user?.role];
+    return userRoles.some(role => roles.includes(role));
+  };
+
   const navItems = [
     { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { path: '/tasks', label: 'Tareas', icon: ListTodo },
-    ...(user?.role === 'admin' || user?.role === 'supervisor'
+    ...(hasRole('admin', 'supervisor')
       ? [
           { path: '/property-types', label: 'Tipos de Propiedad', icon: Building2 },
           { path: '/properties', label: 'Propiedades', icon: Building2 },
@@ -48,8 +55,11 @@ export default function Layout() {
       : []),
     { path: '/cleaning-tasks', label: 'Tareas de Limpieza', icon: ClipboardList },
     { path: '/breakfast-list', label: 'Lista de Desayunos', icon: Coffee },
-    ...(user?.role === 'admin'
-      ? [{ path: '/settings', label: 'Configuración', icon: Settings }]
+    ...(hasRole('admin')
+      ? [
+          { path: '/telegram-permissions', label: 'Permisos Telegram', icon: Shield },
+          { path: '/settings', label: 'Configuración', icon: Settings }
+        ]
       : [])
   ];
 
@@ -84,7 +94,9 @@ export default function Layout() {
           {/* User info */}
           <div className="p-4 border-b border-gray-200">
             <p className="font-semibold text-gray-900">{user?.full_name}</p>
-            <p className="text-sm text-gray-500 capitalize">{user?.role}</p>
+            <p className="text-sm text-gray-500 capitalize">
+              {Array.isArray(user?.role) ? user.role.join(', ') : user?.role}
+            </p>
             <p className="text-xs text-gray-400 mt-1">{user?.tenant?.name}</p>
           </div>
 

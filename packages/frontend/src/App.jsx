@@ -5,6 +5,7 @@ import Dashboard from './pages/Dashboard';
 import Tasks from './pages/Tasks';
 import Users from './pages/Users';
 import Telegram from './pages/Telegram';
+import TelegramPermissions from './pages/TelegramPermissions';
 import Settings from './pages/Settings';
 import PropertyTypes from './pages/PropertyTypes';
 import Properties from './pages/Properties';
@@ -24,8 +25,14 @@ function ProtectedRoute({ children, allowedRoles }) {
     return <Navigate to="/login" replace />;
   }
 
-  if (allowedRoles && !allowedRoles.includes(user?.role)) {
-    return <Navigate to="/dashboard" replace />;
+  if (allowedRoles) {
+    // Support both single role and array of roles
+    const userRoles = Array.isArray(user?.role) ? user.role : [user?.role];
+    const hasRequiredRole = userRoles.some(userRole => allowedRoles.includes(userRole));
+
+    if (!hasRequiredRole) {
+      return <Navigate to="/dashboard" replace />;
+    }
   }
 
   return children;
@@ -131,6 +138,14 @@ function App() {
           element={
             <ProtectedRoute allowedRoles={['admin', 'supervisor']}>
               <Telegram />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="telegram-permissions"
+          element={
+            <ProtectedRoute allowedRoles={['admin']}>
+              <TelegramPermissions />
             </ProtectedRoute>
           }
         />
