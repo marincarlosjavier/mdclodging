@@ -112,18 +112,19 @@ router.post('/', requireRole(['admin', 'supervisor']), asyncHandler(async (req, 
 // PUT /api/properties/:id - Update property
 router.put('/:id', requireRole(['admin', 'supervisor']), asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const { name, status, notes, is_active } = req.body;
+  const { property_type_id, name, status, notes, is_active } = req.body;
 
   const result = await pool.query(
     `UPDATE properties
-     SET name = COALESCE($1, name),
-         status = COALESCE($2, status),
-         notes = COALESCE($3, notes),
-         is_active = COALESCE($4, is_active),
+     SET property_type_id = COALESCE($1, property_type_id),
+         name = COALESCE($2, name),
+         status = COALESCE($3, status),
+         notes = COALESCE($4, notes),
+         is_active = COALESCE($5, is_active),
          updated_at = CURRENT_TIMESTAMP
-     WHERE id = $5 AND tenant_id = $6
+     WHERE id = $6 AND tenant_id = $7
      RETURNING *`,
-    [name, status, notes, is_active, id, req.tenantId]
+    [property_type_id, name, status, notes, is_active, id, req.tenantId]
   );
 
   if (result.rows.length === 0) {
