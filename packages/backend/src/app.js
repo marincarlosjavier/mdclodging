@@ -13,6 +13,7 @@ import catalogRoutes from './routes/catalog.js';
 import propertiesRoutes from './routes/properties.js';
 import reservationsRoutes from './routes/reservations.js';
 import cleaningTasksRoutes from './routes/cleaningTasks.js';
+import cleaningSettlementsRoutes from './routes/cleaning-settlements.js';
 
 // Middleware
 import { errorHandler, notFound } from './middleware/error.js';
@@ -80,6 +81,7 @@ app.use('/api/catalog', catalogRoutes);
 app.use('/api/properties', propertiesRoutes);
 app.use('/api/reservations', reservationsRoutes);
 app.use('/api/cleaning-tasks', cleaningTasksRoutes);
+app.use('/api/cleaning-settlements', cleaningSettlementsRoutes);
 
 // 404 handler
 app.use(notFound);

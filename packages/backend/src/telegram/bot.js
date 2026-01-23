@@ -1,6 +1,14 @@
 import { Telegraf, Markup } from 'telegraf';
 import { pool } from '../config/database.js';
 import bcrypt from 'bcryptjs';
+import {
+  showCleaningTasks,
+  handleTakeTask,
+  handleStartTask,
+  handleCompleteTask,
+  showSettlementStatus,
+  handleReportSettlement
+} from './cleaning-handlers.js';
 
 let bot = null;
 let lastError = null; // Store last error for status reporting
@@ -102,6 +110,8 @@ export async function startTelegramBot() {
   // Commands
   bot.command('start', handleStart);
   bot.command('tasks', handleMyTasks);
+  bot.command('tareas', showCleaningTasks);  // Cleaning tasks
+  bot.command('liquidacion', showSettlementStatus);  // Settlement status
   bot.command('help', handleHelp);
   bot.command('logout', handleLogout);
   bot.command('cancel', handleCancel);
@@ -425,6 +435,21 @@ async function showMainMenu(ctx, contact) {
  */
 async function handleCallback(ctx) {
   const action = ctx.callbackQuery.data;
+
+  // Cleaning tasks callbacks (don't answer query yet, handlers will do it)
+  if (action.startsWith('take_task_')) {
+    const taskId = action.split('_')[2];
+    return await handleTakeTask(ctx, taskId);
+  } else if (action.startsWith('start_task_')) {
+    const taskId = action.split('_')[2];
+    return await handleStartTask(ctx, taskId);
+  } else if (action.startsWith('complete_task_')) {
+    const taskId = action.split('_')[2];
+    return await handleCompleteTask(ctx, taskId);
+  } else if (action === 'report_settlement') {
+    return await handleReportSettlement(ctx);
+  }
+
   await ctx.answerCbQuery();
 
   if (action === 'my_tasks') {
@@ -750,14 +775,21 @@ async function handleHelp(ctx) {
     `❓ *Ayuda - Sistema de Gestión Hotelera*\n\n` +
     `*Comandos disponibles:*\n` +
     `/start - Ver menú principal\n` +
-    `/tasks - Ver mis tareas\n` +
+    `/tasks - Ver mis tareas generales\n` +
+    `/tareas - Ver tareas de limpieza 🧹\n` +
+    `/liquidacion - Ver mi liquidación del día 💰\n` +
     `/help - Mostrar esta ayuda\n` +
     `/logout - Cerrar sesión\n\n` +
-    `*Uso básico:*\n` +
-    `1. Solicita un código de vinculación a tu supervisor\n` +
-    `2. Envía el código al bot\n` +
-    `3. Configura tu PIN de 4 dígitos\n` +
-    `4. ¡Listo! Usa /tasks para ver tus tareas\n\n` +
+    `*Para Housekeeping:*\n` +
+    `1. Usa /tareas para ver propiedades disponibles\n` +
+    `2. Toma una tarea (solo puedes tener una activa)\n` +
+    `3. Al llegar, presiona "▶️ Iniciar"\n` +
+    `4. Al terminar, presiona "✅ Completar"\n` +
+    `5. Al final del día, usa /liquidacion para reportar\n\n` +
+    `*Tipos de aseo:*\n` +
+    `🚪 CHECK OUT - Aseo completo después de salida\n` +
+    `🧹 STAY OVER - Aseo ligero durante estancia\n` +
+    `🧼 DEEP CLEANING - Aseo profundo programado\n\n` +
     `¿Problemas? Contacta a tu supervisor.`,
     { parse_mode: 'Markdown' }
   );
@@ -842,42 +874,48 @@ export async function notifyCheckout(tenantId, reservationData) {
   }
 
   try {
-    // Get all housekeeping staff telegram IDs for this tenant
+    // Get all housekeeping telegram contacts for this tenant
     const result = await pool.query(
       `SELECT DISTINCT tc.telegram_id
        FROM telegram_contacts tc
        JOIN users u ON u.id = tc.user_id
+       JOIN telegram_contact_permissions tcp ON tcp.contact_id = tc.id
+       JOIN telegram_permissions_catalog tpc ON tpc.id = tcp.permission_id
        WHERE u.tenant_id = $1
-         AND u.role IN ('cleaner', 'supervisor', 'admin')
-         AND tc.is_linked = true`,
+         AND tc.is_active = true
+         AND tc.is_linked = true
+         AND tpc.code IN ('housekeeping', 'admin')
+         AND tpc.is_active = true`,
       [tenantId]
     );
 
     const { property_name, actual_checkout_time, adults, children, infants } = reservationData;
-    const totalGuests = adults + children + infants;
+    const totalGuests = (adults || 0) + (children || 0) + (infants || 0);
     const timeStr = new Date(actual_checkout_time).toLocaleTimeString('es-CO', {
-      timeZone: 'America/Bogota',
       hour: '2-digit',
       minute: '2-digit'
     });
 
     const message =
-      `🚪 *Checkout Reportado*\n\n` +
-      `🏨 Propiedad: ${property_name}\n` +
+      `🚪 *CHECKOUT REPORTADO*\n\n` +
+      `📍 Propiedad: *${property_name}*\n` +
       `⏰ Hora: ${timeStr}\n` +
       `👥 Huéspedes: ${totalGuests}\n\n` +
-      `📋 Se ha creado una tarea de limpieza pendiente.`;
+      `La propiedad está disponible para limpieza.\n` +
+      `Usa /tareas para ver y tomar la tarea.`;
 
-    // Send notification to all housekeeping staff
-    for (const row of result.rows) {
+    // Send to all housekeeping staff
+    for (const contact of result.rows) {
       try {
-        await bot.telegram.sendMessage(row.telegram_id, message, { parse_mode: 'Markdown' });
-      } catch (err) {
-        console.error(`Failed to send notification to ${row.telegram_id}:`, err.message);
+        await bot.telegram.sendMessage(contact.telegram_id, message, {
+          parse_mode: 'Markdown'
+        });
+      } catch (error) {
+        console.error(`Failed to notify ${contact.telegram_id}:`, error.message);
       }
     }
 
-    console.log(`✅ Checkout notification sent to ${result.rows.length} staff members`);
+    console.log(`✅ Checkout notification sent to ${result.rows.length} housekeeping staff`);
   } catch (error) {
     console.error('Error sending checkout notification:', error);
   }
