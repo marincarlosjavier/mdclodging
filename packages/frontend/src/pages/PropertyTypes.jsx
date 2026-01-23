@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchPropertyTypes, deletePropertyType } from '../store/slices/propertyTypesSlice';
-import { Plus, Search, Building2, Bed, Home, Edit, Trash2, Eye, MapPin } from 'lucide-react';
+import { Plus, Search, Building2, Bed, Home, Edit, Trash2, Eye, MapPin, Bath, Armchair } from 'lucide-react';
 import { toast } from 'react-toastify';
 import PropertyTypeModal from '../components/propertyTypes/PropertyTypeModal';
 
@@ -186,15 +186,62 @@ export default function PropertyTypes() {
                 </div>
               )}
 
-              <div className="flex gap-4 text-sm text-gray-600 mb-4">
-                <div className="flex items-center gap-1">
-                  <Bed size={16} />
-                  <span>{type.room_count || 0} unidades</span>
+              <div className="space-y-2 mb-4">
+                {/* Bedrooms and Beds */}
+                <div className="flex items-start gap-2 text-sm">
+                  <Bed size={16} className="mt-0.5 flex-shrink-0 text-gray-600" />
+                  <div className="flex-1">
+                    <span className="font-medium text-gray-900">{type.total_bedrooms || 0}</span>
+                    <span className="text-gray-600"> habitacion{type.total_bedrooms !== 1 ? 'es' : ''}</span>
+                    {type.total_beds > 0 && (
+                      <span className="text-gray-500">
+                        {' • '}
+                        {type.total_beds} cama{type.total_beds !== 1 ? 's' : ''}
+                        {' ('}
+                        {[
+                          type.total_single_beds > 0 && `${type.total_single_beds} individual${type.total_single_beds !== 1 ? 'es' : ''}`,
+                          type.total_double_beds > 0 && `${type.total_double_beds} doble${type.total_double_beds !== 1 ? 's' : ''}`,
+                          type.total_queen_beds > 0 && `${type.total_queen_beds} queen`,
+                          type.total_king_beds > 0 && `${type.total_king_beds} king`,
+                          type.total_sofa_beds > 0 && `${type.total_sofa_beds} sofá cama`
+                        ].filter(Boolean).join(', ')}
+                        {')'}
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <div className="flex items-center gap-1">
-                  <Home size={16} />
-                  <span>{type.space_count || 0} espacios</span>
-                </div>
+
+                {/* Bathrooms */}
+                {type.total_bathrooms > 0 && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <Bath size={16} className="flex-shrink-0 text-gray-600" />
+                    <span className="font-medium text-gray-900">{type.total_bathrooms}</span>
+                    <span className="text-gray-600">baño{type.total_bathrooms !== 1 ? 's' : ''}</span>
+                  </div>
+                )}
+
+                {/* Spaces */}
+                {type.space_types && (
+                  <div className="flex items-start gap-2 text-sm">
+                    <Armchair size={16} className="mt-0.5 flex-shrink-0 text-gray-600" />
+                    <div className="flex-1">
+                      <span className="text-gray-600">
+                        {type.space_types.split(', ').map(space => {
+                          const labels = {
+                            kitchen: 'Cocina',
+                            living_room: 'Sala',
+                            dining_room: 'Comedor',
+                            terrace: 'Terraza',
+                            balcony: 'Balcón',
+                            laundry: 'Lavandería',
+                            other: 'Otro'
+                          };
+                          return labels[space] || space;
+                        }).join(', ')}
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="flex gap-2 pt-4 border-t border-gray-200">

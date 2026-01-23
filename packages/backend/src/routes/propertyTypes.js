@@ -19,6 +19,17 @@ router.get('/', asyncHandler(async (req, res) => {
     SELECT pt.*,
       (SELECT COUNT(*) FROM property_type_rooms WHERE property_type_id = pt.id) as room_count,
       (SELECT COUNT(*) FROM property_type_spaces WHERE property_type_id = pt.id) as space_count,
+      (SELECT COUNT(*) FROM property_type_rooms WHERE property_type_id = pt.id) as total_bedrooms,
+      (SELECT COALESCE(SUM(single_beds + double_beds + queen_beds + king_beds + sofa_beds), 0)
+       FROM property_type_rooms WHERE property_type_id = pt.id) as total_beds,
+      (SELECT COALESCE(SUM(single_beds), 0) FROM property_type_rooms WHERE property_type_id = pt.id) as total_single_beds,
+      (SELECT COALESCE(SUM(double_beds), 0) FROM property_type_rooms WHERE property_type_id = pt.id) as total_double_beds,
+      (SELECT COALESCE(SUM(queen_beds), 0) FROM property_type_rooms WHERE property_type_id = pt.id) as total_queen_beds,
+      (SELECT COALESCE(SUM(king_beds), 0) FROM property_type_rooms WHERE property_type_id = pt.id) as total_king_beds,
+      (SELECT COALESCE(SUM(sofa_beds), 0) FROM property_type_rooms WHERE property_type_id = pt.id) as total_sofa_beds,
+      (SELECT COUNT(*) FROM property_type_rooms WHERE property_type_id = pt.id AND has_bathroom = true) as total_bathrooms,
+      (SELECT STRING_AGG(DISTINCT space_type, ', ')
+       FROM property_type_spaces WHERE property_type_id = pt.id) as space_types,
       dept.name as department,
       city.name as city,
       zone.name as zone

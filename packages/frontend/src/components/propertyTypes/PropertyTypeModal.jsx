@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useDispatch } from 'react-redux';
 import { createPropertyType, updatePropertyType, fetchPropertyTypeById } from '../../store/slices/propertyTypesSlice';
-import { fetchCatalogItems } from '../../store/slices/catalogSlice';
+import { fetchCatalogItems, createCatalogItem } from '../../store/slices/catalogSlice';
 import { X, Plus, Trash2, ChevronRight, ChevronLeft } from 'lucide-react';
 import { toast } from 'react-toastify';
 
@@ -35,6 +35,8 @@ export default function PropertyTypeModal({ type, onClose }) {
     allCities: [],  // All cities, unfiltered
     allZones: []    // All zones, unfiltered
   });
+  const [showQuickCreate, setShowQuickCreate] = useState(null); // 'department', 'city', 'zone', or null
+  const [quickCreateData, setQuickCreateData] = useState({ name: '', description: '' });
 
   const [formData, setFormData] = useState({
     name: '',
@@ -84,6 +86,61 @@ export default function PropertyTypeModal({ type, onClose }) {
   const filteredZones = formData.city_id
     ? catalogItems.allZones.filter(zone => zone.parent_id === parseInt(formData.city_id))
     : [];
+
+  // Handle quick create of catalog items
+  const handleQuickCreate = async () => {
+    if (!quickCreateData.name.trim()) {
+      toast.error('El nombre es requerido');
+      return;
+    }
+
+    try {
+      let parent_id = null;
+      if (showQuickCreate === 'city' && formData.department_id) {
+        parent_id = parseInt(formData.department_id);
+      } else if (showQuickCreate === 'zone' && formData.city_id) {
+        parent_id = parseInt(formData.city_id);
+      }
+
+      const newItem = await dispatch(createCatalogItem({
+        category: 'location',
+        type: showQuickCreate,
+        name: quickCreateData.name,
+        description: quickCreateData.description,
+        parent_id
+      })).unwrap();
+
+      toast.success(`${showQuickCreate === 'department' ? 'Departamento' : showQuickCreate === 'city' ? 'Ciudad' : 'Zona'} creado correctamente`);
+
+      // Reload catalog items
+      const [departmentsRes, citiesRes, zonesRes] = await Promise.all([
+        dispatch(fetchCatalogItems({ category: 'location', type: 'department' })).unwrap(),
+        dispatch(fetchCatalogItems({ category: 'location', type: 'city' })).unwrap(),
+        dispatch(fetchCatalogItems({ category: 'location', type: 'zone' })).unwrap()
+      ]);
+
+      setCatalogItems({
+        departments: departmentsRes,
+        allCities: citiesRes,
+        allZones: zonesRes
+      });
+
+      // Auto-select the newly created item
+      if (showQuickCreate === 'department') {
+        setFormData(prev => ({ ...prev, department_id: newItem.item.id }));
+      } else if (showQuickCreate === 'city') {
+        setFormData(prev => ({ ...prev, city_id: newItem.item.id }));
+      } else if (showQuickCreate === 'zone') {
+        setFormData(prev => ({ ...prev, zone_id: newItem.item.id }));
+      }
+
+      // Close quick create modal
+      setShowQuickCreate(null);
+      setQuickCreateData({ name: '', description: '' });
+    } catch (error) {
+      // Error already handled by interceptor
+    }
+  };
 
   useEffect(() => {
     if (type?.id) {
@@ -464,7 +521,7 @@ export default function PropertyTypeModal({ type, onClose }) {
                 <div className="border-t pt-4 mt-4">
                   <h4 className="font-medium text-gray-900 mb-4">Ubicación</h4>
                   <p className="text-sm text-gray-500 mb-3">
-                    Selecciona desde el catálogo. Si no existe, créalo en la sección "Catálogo"
+                    Selecciona desde el catálogo o crea uno nuevo con el botón +
                   </p>
 
                   <div className="grid grid-cols-3 gap-4">
@@ -472,63 +529,112 @@ export default function PropertyTypeModal({ type, onClose }) {
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Departamento
                       </label>
-                      <select
-                        name="department_id"
-                        value={formData.department_id}
-                        onChange={handleChange}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
-                      >
-                        <option value="">Seleccionar...</option>
-                        {catalogItems.departments.map((item) => (
-                          <option key={item.id} value={item.id}>
-                            {item.name}
-                          </option>
-                        ))}
-                      </select>
+                      <div className="flex gap-2">
+                        <select
+                          name="department_id"
+                          value={formData.department_id}
+                          onChange={handleChange}
+                          className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
+                        >
+                          <option value="">Seleccionar...</option>
+                          {catalogItems.departments.map((item) => (
+                            <option key={item.id} value={item.id}>
+                              {item.name}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowQuickCreate('department');
+                            setQuickCreateData({ name: '', description: '' });
+                          }}
+                          className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
+                          title="Crear nuevo departamento"
+                        >
+                          <Plus size={20} />
+                        </button>
+                      </div>
                     </div>
 
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Ciudad
                       </label>
-                      <select
-                        name="city_id"
-                        value={formData.city_id}
-                        onChange={handleChange}
-                        disabled={!formData.department_id}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none disabled:bg-gray-100 disabled:cursor-not-allowed"
-                      >
-                        <option value="">
-                          {formData.department_id ? 'Seleccionar...' : 'Primero selecciona un departamento'}
-                        </option>
-                        {filteredCities.map((item) => (
-                          <option key={item.id} value={item.id}>
-                            {item.name}
+                      <div className="flex gap-2">
+                        <select
+                          name="city_id"
+                          value={formData.city_id}
+                          onChange={handleChange}
+                          disabled={!formData.department_id}
+                          className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none disabled:bg-gray-100 disabled:cursor-not-allowed"
+                        >
+                          <option value="">
+                            {formData.department_id ? 'Seleccionar...' : 'Primero selecciona un departamento'}
                           </option>
-                        ))}
-                      </select>
+                          {filteredCities.map((item) => (
+                            <option key={item.id} value={item.id}>
+                              {item.name}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!formData.department_id) {
+                              toast.warning('Primero selecciona un departamento');
+                              return;
+                            }
+                            setShowQuickCreate('city');
+                            setQuickCreateData({ name: '', description: '' });
+                          }}
+                          disabled={!formData.department_id}
+                          className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition disabled:bg-gray-300 disabled:cursor-not-allowed"
+                          title="Crear nueva ciudad"
+                        >
+                          <Plus size={20} />
+                        </button>
+                      </div>
                     </div>
 
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Edificio/Zona
                       </label>
-                      <select
-                        name="zone_id"
-                        value={formData.zone_id}
-                        onChange={handleChange}
-                        disabled={!formData.city_id}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none disabled:bg-gray-100 disabled:cursor-not-allowed"
-                      >
-                        <option value="">
-                          {formData.city_id ? 'Seleccionar...' : 'Primero selecciona una ciudad'}
-                        </option>
-                        {filteredZones.map((item) => (
-                          <option key={item.id} value={item.id}>
-                            {item.name}
+                      <div className="flex gap-2">
+                        <select
+                          name="zone_id"
+                          value={formData.zone_id}
+                          onChange={handleChange}
+                          disabled={!formData.city_id}
+                          className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none disabled:bg-gray-100 disabled:cursor-not-allowed"
+                        >
+                          <option value="">
+                            {formData.city_id ? 'Seleccionar...' : 'Primero selecciona una ciudad'}
                           </option>
-                        ))}
-                      </select>
+                          {filteredZones.map((item) => (
+                            <option key={item.id} value={item.id}>
+                              {item.name}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!formData.city_id) {
+                              toast.warning('Primero selecciona una ciudad');
+                              return;
+                            }
+                            setShowQuickCreate('zone');
+                            setQuickCreateData({ name: '', description: '' });
+                          }}
+                          disabled={!formData.city_id}
+                          className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition disabled:bg-gray-300 disabled:cursor-not-allowed"
+                          title="Crear nueva zona"
+                        >
+                          <Plus size={20} />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1197,6 +1303,78 @@ export default function PropertyTypeModal({ type, onClose }) {
           </div>
         </div>
       </div>
+
+      {/* Quick Create Location Modal */}
+      {showQuickCreate && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60]">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 m-4">
+            <h3 className="text-lg font-bold text-gray-900 mb-4">
+              Crear {showQuickCreate === 'department' ? 'Departamento' : showQuickCreate === 'city' ? 'Ciudad' : 'Zona'}
+            </h3>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Nombre *
+                </label>
+                <input
+                  type="text"
+                  value={quickCreateData.name}
+                  onChange={(e) => setQuickCreateData({ ...quickCreateData, name: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
+                  placeholder={`Nombre del ${showQuickCreate === 'department' ? 'departamento' : showQuickCreate === 'city' ? 'ciudad' : 'zona'}`}
+                  autoFocus
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Descripción
+                </label>
+                <textarea
+                  value={quickCreateData.description}
+                  onChange={(e) => setQuickCreateData({ ...quickCreateData, description: e.target.value })}
+                  rows={3}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
+                  placeholder="Descripción opcional..."
+                />
+              </div>
+
+              {showQuickCreate === 'city' && formData.department_id && (
+                <div className="text-sm text-gray-600 bg-blue-50 p-3 rounded">
+                  Se creará en: <strong>{catalogItems.departments.find(d => d.id === parseInt(formData.department_id))?.name}</strong>
+                </div>
+              )}
+
+              {showQuickCreate === 'zone' && formData.city_id && (
+                <div className="text-sm text-gray-600 bg-blue-50 p-3 rounded">
+                  Se creará en: <strong>{catalogItems.allCities.find(c => c.id === parseInt(formData.city_id))?.name}</strong>
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-2 mt-6">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowQuickCreate(null);
+                  setQuickCreateData({ name: '', description: '' });
+                }}
+                className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleQuickCreate}
+                className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
+              >
+                Crear
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
