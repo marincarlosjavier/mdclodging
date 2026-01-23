@@ -17,7 +17,8 @@ import {
   Coffee,
   FileText,
   DoorOpen,
-  Shield
+  Shield,
+  DollarSign
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -55,6 +56,11 @@ export default function Layout() {
       : []),
     { path: '/cleaning-tasks', label: 'Tareas de Limpieza', icon: ClipboardList },
     { path: '/breakfast-list', label: 'Lista de Desayunos', icon: Coffee },
+    ...(hasRole('admin', 'supervisor')
+      ? [
+          { path: '/cleaning-settlements', label: 'Liquidaciones', icon: DollarSign }
+        ]
+      : []),
     ...(hasRole('admin')
       ? [
           { path: '/telegram-permissions', label: 'Permisos Telegram', icon: Shield },

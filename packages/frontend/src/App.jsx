@@ -12,6 +12,7 @@ import Properties from './pages/Properties';
 import Catalog from './pages/Catalog';
 import Reservations from './pages/Reservations';
 import CleaningTasks from './pages/CleaningTasks';
+import CleaningSettlements from './pages/CleaningSettlements';
 import BreakfastList from './pages/BreakfastList';
 import CheckoutReport from './pages/CheckoutReport';
 import CheckinReport from './pages/CheckinReport';
@@ -90,6 +91,14 @@ function App() {
           element={
             <ProtectedRoute allowedRoles={['admin', 'supervisor', 'staff']}>
               <CleaningTasks />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="cleaning-settlements"
+          element={
+            <ProtectedRoute allowedRoles={['admin', 'supervisor']}>
+              <CleaningSettlements />
             </ProtectedRoute>
           }
         />
