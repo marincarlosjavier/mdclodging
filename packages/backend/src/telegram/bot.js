@@ -9,10 +9,24 @@ import {
   showSettlementStatus,
   handleReportSettlement
 } from './cleaning-handlers.js';
+import {
+  showAdminMenu,
+  showPendingSettlements,
+  showSettlementForReview,
+  approveSettlement,
+  startRejectSettlement,
+  handleRejectReason,
+  showApprovedSettlements,
+  startPaymentFlow,
+  registerPayment,
+  showRatesManagement,
+  showPropertiesForCheckout,
+  reportCheckout
+} from './admin-handlers.js';
 
 let bot = null;
 let lastError = null; // Store last error for status reporting
-const userSessions = new Map(); // Store user sessions { telegramId: {state, data} }
+export const userSessions = new Map(); // Store user sessions { telegramId: {state, data} }
 
 /**
  * Get bot instance for specific tenant (multi-tenant support)
@@ -112,6 +126,7 @@ export async function startTelegramBot() {
   bot.command('tasks', handleMyTasks);
   bot.command('tareas', showCleaningTasks);  // Cleaning tasks
   bot.command('liquidacion', showSettlementStatus);  // Settlement status
+  bot.command('admin', showAdminMenu);  // Admin menu
   bot.command('help', handleHelp);
   bot.command('logout', handleLogout);
   bot.command('cancel', handleCancel);
@@ -281,6 +296,11 @@ async function handleText(ctx) {
     return handleTaskNotes(ctx, text);
   }
 
+  // State: awaiting rejection reason (admin rejecting settlement)
+  if (session.rejectingSettlement) {
+    return handleRejectReason(ctx, text, session.rejectingSettlement);
+  }
+
   // Default
   ctx.reply(
     '❓ No entiendo ese mensaje.\n\n' +
@@ -448,6 +468,39 @@ async function handleCallback(ctx) {
     return await handleCompleteTask(ctx, taskId);
   } else if (action === 'report_settlement') {
     return await handleReportSettlement(ctx);
+  }
+
+  // Admin callbacks
+  if (action === 'admin_menu') {
+    return await showAdminMenu(ctx);
+  } else if (action === 'admin_settlements_pending') {
+    return await showPendingSettlements(ctx);
+  } else if (action.startsWith('admin_review_')) {
+    const settlementId = action.split('_')[2];
+    return await showSettlementForReview(ctx, settlementId);
+  } else if (action.startsWith('approve_settlement_')) {
+    const settlementId = action.split('_')[2];
+    return await approveSettlement(ctx, settlementId);
+  } else if (action.startsWith('reject_settlement_')) {
+    const settlementId = action.split('_')[2];
+    return await startRejectSettlement(ctx, settlementId);
+  } else if (action === 'admin_register_payment') {
+    return await showApprovedSettlements(ctx);
+  } else if (action.startsWith('admin_pay_')) {
+    const settlementId = action.split('_')[2];
+    return await startPaymentFlow(ctx, settlementId);
+  } else if (action.startsWith('pay_method_')) {
+    const parts = action.split('_');
+    const method = parts[2];
+    const settlementId = parts[3];
+    return await registerPayment(ctx, settlementId, method);
+  } else if (action === 'admin_manage_rates') {
+    return await showRatesManagement(ctx);
+  } else if (action === 'admin_report_checkout') {
+    return await showPropertiesForCheckout(ctx);
+  } else if (action.startsWith('checkout_report_')) {
+    const reservationId = action.split('_')[2];
+    return await reportCheckout(ctx, reservationId);
   }
 
   await ctx.answerCbQuery();
