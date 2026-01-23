@@ -118,12 +118,3 @@ export const catalogAPI = {
   update: (id, data) => api.put(`/catalog/${id}`, data),
   delete: (id) => api.delete(`/catalog/${id}`)
 };
-
-// Properties API
-export const propertiesAPI = {
-  getAll: (params) => api.get('/properties', { params }),
-  getById: (id) => api.get(`/properties/${id}`),
-  create: (data) => api.post('/properties', data),
-  update: (id, data) => api.put(`/properties/${id}`, data),
-  delete: (id) => api.delete(`/properties/${id}`)
-};
