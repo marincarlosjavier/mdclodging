@@ -5,27 +5,6 @@ import { fetchCatalogItems, createCatalogItem } from '../../store/slices/catalog
 import { X, Plus, Trash2, ChevronRight, ChevronLeft, Bed, Home } from 'lucide-react';
 import { toast } from 'react-toastify';
 
-// Helper function to generate unit names based on nomenclature settings
-const generateUnitNames = (count, nomenclatureType, prefix, start) => {
-  const names = [];
-  if (nomenclatureType === 'numeric') {
-    for (let i = 0; i < count; i++) {
-      names.push(`${prefix}${start + i}`);
-    }
-  } else if (nomenclatureType === 'alphabetic') {
-    const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-    for (let i = 0; i < count && i < 26; i++) {
-      names.push(`${prefix}${letters[i]}`);
-    }
-  } else {
-    // custom - just empty strings that user will fill
-    for (let i = 0; i < count; i++) {
-      names.push('');
-    }
-  }
-  return names;
-};
-
 export default function PropertyTypeModal({ type, onClose }) {
   const dispatch = useDispatch();
   const [step, setStep] = useState(1);
@@ -45,12 +24,6 @@ export default function PropertyTypeModal({ type, onClose }) {
     department_id: '',
     city_id: '',
     zone_id: '',
-    room_count: 1,
-    room_nomenclature_type: 'numeric',
-    room_nomenclature_prefix: '',
-    room_nomenclature_start: 101,
-    room_nomenclature_examples: '',
-    unit_names: [''],  // Array of individual unit names
     rooms: [],
     spaces: []
   });
@@ -148,16 +121,6 @@ export default function PropertyTypeModal({ type, onClose }) {
       dispatch(fetchPropertyTypeById(type.id))
         .unwrap()
         .then((data) => {
-          // Convert room_nomenclature_examples back to unit_names array
-          const unitNames = data.room_nomenclature_examples
-            ? data.room_nomenclature_examples.split(',').map(name => name.trim())
-            : generateUnitNames(
-                data.room_count || 1,
-                data.room_nomenclature_type || 'numeric',
-                data.room_nomenclature_prefix || '',
-                data.room_nomenclature_start || 101
-              );
-
           setFormData({
             name: data.name || '',
             description: data.description || '',
@@ -165,12 +128,6 @@ export default function PropertyTypeModal({ type, onClose }) {
             department_id: data.department_id || '',
             city_id: data.city_id || '',
             zone_id: data.zone_id || '',
-            room_count: data.room_count || 1,
-            room_nomenclature_type: data.room_nomenclature_type || 'numeric',
-            room_nomenclature_prefix: data.room_nomenclature_prefix || '',
-            room_nomenclature_start: data.room_nomenclature_start || 101,
-            room_nomenclature_examples: data.room_nomenclature_examples || '',
-            unit_names: unitNames,
             rooms: data.rooms || [],
             spaces: data.spaces || []
           });
@@ -198,26 +155,8 @@ export default function PropertyTypeModal({ type, onClose }) {
         updated.zone_id = '';
       }
 
-      // Auto-regenerate unit names when relevant fields change
-      if (name === 'room_count' || name === 'room_nomenclature_type' ||
-          name === 'room_nomenclature_prefix' || name === 'room_nomenclature_start') {
-        const count = name === 'room_count' ? newValue : prev.room_count;
-        const nomenclatureType = name === 'room_nomenclature_type' ? newValue : prev.room_nomenclature_type;
-        const prefix = name === 'room_nomenclature_prefix' ? newValue : prev.room_nomenclature_prefix;
-        const start = name === 'room_nomenclature_start' ? newValue : prev.room_nomenclature_start;
-
-        updated.unit_names = generateUnitNames(count, nomenclatureType, prefix, start);
-      }
-
       return updated;
     });
-  };
-
-  const handleUnitNameChange = (index, value) => {
-    setFormData(prev => ({
-      ...prev,
-      unit_names: prev.unit_names.map((name, i) => i === index ? value : name)
-    }));
   };
 
   const handleAddRoom = () => {
@@ -386,12 +325,8 @@ export default function PropertyTypeModal({ type, onClose }) {
       setLoading(true);
       const submitData = {
         ...formData,
-        rooms: formatRoomsForBackend(formData.rooms),
-        // Convert unit_names array to comma-separated string
-        room_nomenclature_examples: formData.unit_names.join(', ')
+        rooms: formatRoomsForBackend(formData.rooms)
       };
-      // Remove unit_names as it's not a backend field
-      delete submitData.unit_names;
 
       if (type?.id) {
         await dispatch(updatePropertyType({ id: type.id, data: submitData })).unwrap();
@@ -406,24 +341,6 @@ export default function PropertyTypeModal({ type, onClose }) {
     } finally {
       setLoading(false);
     }
-  };
-
-  const generateNomenclatureExamples = () => {
-    const count = Math.min(formData.room_count, 5);
-    const examples = [];
-
-    if (formData.room_nomenclature_type === 'numeric') {
-      for (let i = 0; i < count; i++) {
-        examples.push(`${formData.room_nomenclature_prefix}${formData.room_nomenclature_start + i}`);
-      }
-    } else if (formData.room_nomenclature_type === 'alphabetic') {
-      const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-      for (let i = 0; i < count; i++) {
-        examples.push(`${formData.room_nomenclature_prefix}${letters[i]}`);
-      }
-    }
-
-    return examples.join(', ') + (formData.room_count > 5 ? '...' : '');
   };
 
   return (
@@ -648,127 +565,6 @@ export default function PropertyTypeModal({ type, onClose }) {
                   </div>
                 </div>
 
-                {/* Cantidad de Unidades y Nomenclatura */}
-                <div className="border-t pt-6">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Cantidad de Unidades y Nomenclatura</h3>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Cantidad de Unidades *
-                      </label>
-                      <input
-                        type="number"
-                        name="room_count"
-                        min="1"
-                        value={formData.room_count}
-                        onChange={handleChange}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
-                      />
-                      <p className="text-xs text-gray-500 mt-1">
-                        Cuántas habitaciones/apartamentos hay de este tipo
-                      </p>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Tipo de Nomenclatura *
-                      </label>
-                      <select
-                        name="room_nomenclature_type"
-                        value={formData.room_nomenclature_type}
-                        onChange={handleChange}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
-                      >
-                        <option value="numeric">Numérica (101, 102, 103...)</option>
-                        <option value="alphabetic">Alfabética (A, B, C...)</option>
-                        <option value="custom">Personalizada</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Prefijo (opcional)
-                      </label>
-                      <input
-                        type="text"
-                        name="room_nomenclature_prefix"
-                        value={formData.room_nomenclature_prefix}
-                        onChange={handleChange}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
-                        placeholder="APT-, CASA-, etc."
-                      />
-                    </div>
-
-                    {formData.room_nomenclature_type === 'numeric' && (
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Número Inicial
-                        </label>
-                        <input
-                          type="number"
-                          name="room_nomenclature_start"
-                          value={formData.room_nomenclature_start}
-                          onChange={handleChange}
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
-                        />
-                      </div>
-                    )}
-
-                    {formData.room_nomenclature_type === 'custom' && (
-                      <div className="col-span-2">
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Ejemplos de Nombres (separados por coma)
-                        </label>
-                        <input
-                          type="text"
-                          name="room_nomenclature_examples"
-                          value={formData.room_nomenclature_examples}
-                          onChange={handleChange}
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
-                          placeholder="Casa Vista Mar, Casa del Sol, Casa Bella..."
-                        />
-                      </div>
-                    )}
-                  </div>
-
-                  {formData.room_nomenclature_type !== 'custom' && (
-                    <div className="mt-3 p-3 bg-blue-50 rounded-lg">
-                      <p className="text-sm text-gray-700">
-                        <span className="font-medium">Vista previa: </span>
-                        {generateNomenclatureExamples()}
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Individual Unit Names */}
-                  {formData.room_count > 0 && (
-                    <div className="mt-4">
-                      <label className="block text-sm font-medium text-gray-900 mb-2">
-                        Nomenclaturas Específicas
-                      </label>
-                      <p className="text-xs text-gray-500 mb-3">
-                        Personaliza los nombres de cada unidad según tu preferencia
-                      </p>
-                      <div className="grid grid-cols-3 gap-3">
-                        {formData.unit_names.map((unitName, index) => (
-                          <div key={index}>
-                            <label className="block text-xs text-gray-600 mb-1">
-                              Unidad {index + 1}
-                            </label>
-                            <input
-                              type="text"
-                              value={unitName}
-                              onChange={(e) => handleUnitNameChange(index, e.target.value)}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-sm"
-                              placeholder={`Ej: ${formData.room_nomenclature_prefix}${formData.room_nomenclature_type === 'numeric' ? formData.room_nomenclature_start + index : String.fromCharCode(65 + index)}`}
-                            />
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
               </div>
             )}
 

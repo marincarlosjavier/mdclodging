@@ -75,71 +75,6 @@ export default function Properties() {
     }
   };
 
-  // Generate nomenclature suggestions when type is selected
-  const getNextAvailableName = () => {
-    if (!formData.property_type_id) return '';
-
-    const selectedType = types.find(t => t.id === parseInt(formData.property_type_id));
-    if (!selectedType) return '';
-
-    const {
-      room_nomenclature_type,
-      room_nomenclature_prefix,
-      room_nomenclature_start,
-      room_nomenclature_examples
-    } = selectedType;
-
-    // Get existing properties of this type
-    const existingProps = properties.filter(p => p.property_type_id === parseInt(formData.property_type_id));
-    const existingNames = new Set(existingProps.map(p => p.name));
-
-    if (room_nomenclature_type === 'numeric') {
-      const prefix = room_nomenclature_prefix || '';
-      const start = room_nomenclature_start || 101;
-
-      // Find next available number
-      for (let i = 0; i < 1000; i++) {
-        const name = `${prefix}${start + i}`;
-        if (!existingNames.has(name)) {
-          return name;
-        }
-      }
-    } else if (room_nomenclature_type === 'alphabetic') {
-      const prefix = room_nomenclature_prefix || '';
-      const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-
-      for (let i = 0; i < 26; i++) {
-        const name = `${prefix}${letters[i]}`;
-        if (!existingNames.has(name)) {
-          return name;
-        }
-      }
-    } else if (room_nomenclature_type === 'custom' && room_nomenclature_examples) {
-      const names = room_nomenclature_examples.split(',').map(n => n.trim()).filter(n => n);
-      for (const name of names) {
-        if (!existingNames.has(name)) {
-          return name;
-        }
-      }
-    }
-
-    return '';
-  };
-
-  // Auto-suggest name when type changes
-  const handleTypeChange = (typeId) => {
-    setFormData(prev => ({ ...prev, property_type_id: typeId }));
-
-    // Auto-suggest next available name
-    setTimeout(() => {
-      if (!editingProperty) {
-        const suggestion = getNextAvailableName();
-        if (suggestion) {
-          setFormData(prev => ({ ...prev, name: suggestion }));
-        }
-      }
-    }, 0);
-  };
 
   const filteredProperties = properties.filter((property) => {
     const matchesSearch = property.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -392,7 +327,7 @@ export default function Properties() {
                   </label>
                   <select
                     value={formData.property_type_id}
-                    onChange={(e) => handleTypeChange(e.target.value)}
+                    onChange={(e) => setFormData({ ...formData, property_type_id: e.target.value })}
                     required
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
                   >
@@ -417,11 +352,6 @@ export default function Properties() {
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
                     placeholder="Ej: Apto 101, Habitación 201"
                   />
-                  {formData.property_type_id && !editingProperty && (
-                    <p className="text-xs text-gray-500 mt-1">
-                      Sugerencia basada en nomenclatura del tipo
-                    </p>
-                  )}
                 </div>
 
                 <div>
