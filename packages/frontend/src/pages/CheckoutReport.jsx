@@ -243,20 +243,20 @@ export default function CheckoutReport() {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      {checkout.actual_checkout_time ? (
-                        <div className="flex items-center gap-2 text-blue-700 font-medium">
+                      {checkout.checkout_time ? (
+                        <div className="flex items-center gap-2 text-gray-700">
                           <Clock className="w-4 h-4" />
-                          {formatTime(checkout.actual_checkout_time)}
+                          {formatTime(checkout.checkout_time)}
                         </div>
                       ) : (
                         <span className="text-gray-400">-</span>
                       )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      {checkout.assigned_at ? (
+                      {checkout.actual_checkout_time ? (
                         <div className="flex items-center gap-2 text-green-700 font-medium">
                           <CheckCircle className="w-4 h-4" />
-                          {formatTime(checkout.assigned_at)}
+                          {formatTime(checkout.actual_checkout_time)}
                         </div>
                       ) : (
                         <span className="text-gray-400">-</span>
