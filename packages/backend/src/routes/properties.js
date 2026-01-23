@@ -135,7 +135,7 @@ router.put('/:id', requireRole('admin', 'supervisor'), asyncHandler(async (req, 
 }));
 
 // DELETE /api/properties/:id - Delete property
-router.delete('/:id', requireRole(['admin']), asyncHandler(async (req, res) => {
+router.delete('/:id', requireRole('admin'), asyncHandler(async (req, res) => {
   const { id } = req.params;
 
   const result = await pool.query(
