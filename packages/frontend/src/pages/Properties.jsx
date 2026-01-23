@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { fetchProperties, updateProperty, deleteProperty } from '../store/slices/propertiesSlice';
+import { fetchProperties, createProperty, updateProperty, deleteProperty } from '../store/slices/propertiesSlice';
 import { fetchPropertyTypes } from '../store/slices/propertyTypesSlice';
-import { Search, Building2, MapPin, Bed, Edit, Trash2, Filter } from 'lucide-react';
+import { Plus, Search, Building2, MapPin, Bed, Edit, Trash2, Filter, X } from 'lucide-react';
 import { toast } from 'react-toastify';
 
 export default function Properties() {
@@ -12,8 +12,14 @@ export default function Properties() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
+  const [showModal, setShowModal] = useState(false);
   const [editingProperty, setEditingProperty] = useState(null);
-  const [editStatus, setEditStatus] = useState('');
+  const [formData, setFormData] = useState({
+    property_type_id: '',
+    name: '',
+    status: 'available',
+    notes: ''
+  });
 
   useEffect(() => {
     dispatch(fetchProperties());
@@ -30,20 +36,109 @@ export default function Properties() {
     }
   };
 
-  const handleUpdateStatus = async () => {
-    if (!editingProperty) return;
+  const handleEdit = (property) => {
+    setEditingProperty(property);
+    setFormData({
+      property_type_id: property.property_type_id,
+      name: property.name,
+      status: property.status,
+      notes: property.notes || ''
+    });
+    setShowModal(true);
+  };
 
+  const handleCreate = () => {
+    setEditingProperty(null);
+    setFormData({
+      property_type_id: '',
+      name: '',
+      status: 'available',
+      notes: ''
+    });
+    setShowModal(true);
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
     try {
-      await dispatch(updateProperty({
-        id: editingProperty.id,
-        data: { status: editStatus }
-      })).unwrap();
-      toast.success('Estado actualizado correctamente');
-      setEditingProperty(null);
+      if (editingProperty) {
+        await dispatch(updateProperty({ id: editingProperty.id, data: formData })).unwrap();
+        toast.success('Propiedad actualizada correctamente');
+      } else {
+        await dispatch(createProperty(formData)).unwrap();
+        toast.success('Propiedad creada correctamente');
+      }
+      setShowModal(false);
       dispatch(fetchProperties());
     } catch (error) {
       // Error already handled
     }
+  };
+
+  // Generate nomenclature suggestions when type is selected
+  const getNextAvailableName = () => {
+    if (!formData.property_type_id) return '';
+
+    const selectedType = types.find(t => t.id === parseInt(formData.property_type_id));
+    if (!selectedType) return '';
+
+    const {
+      room_nomenclature_type,
+      room_nomenclature_prefix,
+      room_nomenclature_start,
+      room_nomenclature_examples
+    } = selectedType;
+
+    // Get existing properties of this type
+    const existingProps = properties.filter(p => p.property_type_id === parseInt(formData.property_type_id));
+    const existingNames = new Set(existingProps.map(p => p.name));
+
+    if (room_nomenclature_type === 'numeric') {
+      const prefix = room_nomenclature_prefix || '';
+      const start = room_nomenclature_start || 101;
+
+      // Find next available number
+      for (let i = 0; i < 1000; i++) {
+        const name = `${prefix}${start + i}`;
+        if (!existingNames.has(name)) {
+          return name;
+        }
+      }
+    } else if (room_nomenclature_type === 'alphabetic') {
+      const prefix = room_nomenclature_prefix || '';
+      const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+
+      for (let i = 0; i < 26; i++) {
+        const name = `${prefix}${letters[i]}`;
+        if (!existingNames.has(name)) {
+          return name;
+        }
+      }
+    } else if (room_nomenclature_type === 'custom' && room_nomenclature_examples) {
+      const names = room_nomenclature_examples.split(',').map(n => n.trim()).filter(n => n);
+      for (const name of names) {
+        if (!existingNames.has(name)) {
+          return name;
+        }
+      }
+    }
+
+    return '';
+  };
+
+  // Auto-suggest name when type changes
+  const handleTypeChange = (typeId) => {
+    setFormData(prev => ({ ...prev, property_type_id: typeId }));
+
+    // Auto-suggest next available name
+    setTimeout(() => {
+      if (!editingProperty) {
+        const suggestion = getNextAvailableName();
+        if (suggestion) {
+          setFormData(prev => ({ ...prev, name: suggestion }));
+        }
+      }
+    }, 0);
   };
 
   const filteredProperties = properties.filter((property) => {
@@ -76,25 +171,13 @@ export default function Properties() {
     return labels[status] || status;
   };
 
-  // Group properties by type for stats
-  const propertiesByType = properties.reduce((acc, prop) => {
-    const typeName = prop.type_name || 'Sin tipo';
-    if (!acc[typeName]) {
-      acc[typeName] = { total: 0, available: 0, occupied: 0 };
-    }
-    acc[typeName].total++;
-    if (prop.status === 'available') acc[typeName].available++;
-    if (prop.status === 'occupied') acc[typeName].occupied++;
-    return acc;
-  }, {});
-
   return (
     <div>
       {/* Header */}
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900 mb-2">Propiedades</h1>
         <p className="text-gray-600">
-          Listado de todas las unidades individuales (apartamentos/habitaciones)
+          Gestión de unidades individuales (apartamentos/habitaciones)
         </p>
       </div>
 
@@ -124,7 +207,7 @@ export default function Properties() {
         </div>
       </div>
 
-      {/* Filters */}
+      {/* Filters and Actions */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-6">
         <div className="flex items-center gap-2 mb-4">
           <Filter size={20} className="text-gray-500" />
@@ -165,6 +248,13 @@ export default function Properties() {
             <option value="cleaning">Limpieza</option>
             <option value="reserved">Reservada</option>
           </select>
+          <button
+            onClick={handleCreate}
+            className="flex items-center gap-2 px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition whitespace-nowrap"
+          >
+            <Plus size={20} />
+            Nueva Propiedad
+          </button>
         </div>
       </div>
 
@@ -176,10 +266,14 @@ export default function Properties() {
       ) : filteredProperties.length === 0 ? (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
           <Building2 className="mx-auto text-gray-400 mb-4" size={48} />
-          <p className="text-gray-600 mb-2">No hay propiedades registradas</p>
-          <p className="text-sm text-gray-500">
-            Las propiedades se generan automáticamente desde los Tipos de Propiedades
-          </p>
+          <p className="text-gray-600 mb-4">No hay propiedades registradas</p>
+          <button
+            onClick={handleCreate}
+            className="inline-flex items-center gap-2 px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition"
+          >
+            <Plus size={20} />
+            Crear Primera Propiedad
+          </button>
         </div>
       ) : (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
@@ -252,12 +346,9 @@ export default function Properties() {
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                     <div className="flex items-center justify-end gap-2">
                       <button
-                        onClick={() => {
-                          setEditingProperty(property);
-                          setEditStatus(property.status);
-                        }}
+                        onClick={() => handleEdit(property)}
                         className="text-primary-600 hover:text-primary-900"
-                        title="Cambiar estado"
+                        title="Editar"
                       >
                         <Edit size={18} />
                       </button>
@@ -277,45 +368,109 @@ export default function Properties() {
         </div>
       )}
 
-      {/* Edit Status Modal */}
-      {editingProperty && (
+      {/* Create/Edit Modal */}
+      {showModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
-            <h3 className="text-lg font-bold text-gray-900 mb-4">
-              Cambiar Estado - {editingProperty.name}
-            </h3>
-
-            <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Nuevo Estado
-              </label>
-              <select
-                value={editStatus}
-                onChange={(e) => setEditStatus(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
-              >
-                <option value="available">Disponible</option>
-                <option value="occupied">Ocupada</option>
-                <option value="maintenance">Mantenimiento</option>
-                <option value="cleaning">Limpieza</option>
-                <option value="reserved">Reservada</option>
-              </select>
-            </div>
-
-            <div className="flex gap-2">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold text-gray-900">
+                {editingProperty ? 'Editar Propiedad' : 'Nueva Propiedad'}
+              </h2>
               <button
-                onClick={() => setEditingProperty(null)}
-                className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition"
+                onClick={() => setShowModal(false)}
+                className="text-gray-400 hover:text-gray-600"
               >
-                Cancelar
-              </button>
-              <button
-                onClick={handleUpdateStatus}
-                className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition"
-              >
-                Actualizar
+                <X size={24} />
               </button>
             </div>
+
+            <form onSubmit={handleSubmit}>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Tipo de Propiedad *
+                  </label>
+                  <select
+                    value={formData.property_type_id}
+                    onChange={(e) => handleTypeChange(e.target.value)}
+                    required
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
+                  >
+                    <option value="">Seleccionar...</option>
+                    {types.map((type) => (
+                      <option key={type.id} value={type.id}>
+                        {type.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Nombre *
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    required
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
+                    placeholder="Ej: Apto 101, Habitación 201"
+                  />
+                  {formData.property_type_id && !editingProperty && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      Sugerencia basada en nomenclatura del tipo
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Estado
+                  </label>
+                  <select
+                    value={formData.status}
+                    onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
+                  >
+                    <option value="available">Disponible</option>
+                    <option value="occupied">Ocupada</option>
+                    <option value="maintenance">Mantenimiento</option>
+                    <option value="cleaning">Limpieza</option>
+                    <option value="reserved">Reservada</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Notas
+                  </label>
+                  <textarea
+                    value={formData.notes}
+                    onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                    rows={3}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
+                    placeholder="Notas adicionales..."
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-2 mt-6">
+                <button
+                  type="button"
+                  onClick={() => setShowModal(false)}
+                  className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition"
+                >
+                  {editingProperty ? 'Actualizar' : 'Crear'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

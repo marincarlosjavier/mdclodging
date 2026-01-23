@@ -1,10 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchPropertyTypes, deletePropertyType } from '../store/slices/propertyTypesSlice';
-import { Plus, Search, Building2, Bed, Home, Edit, Trash2, Eye, MapPin, Bath, Armchair, Sparkles } from 'lucide-react';
+import { Plus, Search, Building2, Bed, Home, Edit, Trash2, Eye, MapPin, Bath, Armchair } from 'lucide-react';
 import { toast } from 'react-toastify';
 import PropertyTypeModal from '../components/propertyTypes/PropertyTypeModal';
-import { propertiesAPI } from '../services/api';
 
 export default function PropertyTypes() {
   const dispatch = useDispatch();
@@ -42,17 +41,6 @@ export default function PropertyTypes() {
     setShowModal(false);
     setEditingType(null);
     dispatch(fetchPropertyTypes());
-  };
-
-  const handleGenerateProperties = async (typeId, typeName) => {
-    if (!confirm(`¿Generar propiedades para "${typeName}"?\n\nEsto creará las unidades individuales basadas en la nomenclatura configurada.`)) return;
-
-    try {
-      const response = await propertiesAPI.generateFromType(typeId);
-      toast.success(`${response.data.created} propiedades generadas correctamente${response.data.skipped > 0 ? ` (${response.data.skipped} ya existían)` : ''}`);
-    } catch (error) {
-      // Error already handled by interceptor
-    }
   };
 
   const filteredTypes = types.filter((type) => {
@@ -256,29 +244,20 @@ export default function PropertyTypes() {
                 )}
               </div>
 
-              <div className="space-y-2 pt-4 border-t border-gray-200">
+              <div className="flex gap-2 pt-4 border-t border-gray-200">
                 <button
-                  onClick={() => handleGenerateProperties(type.id, type.name)}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2 text-white bg-green-600 rounded-lg hover:bg-green-700 transition font-medium"
+                  onClick={() => handleEdit(type)}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2 text-primary-600 bg-primary-50 rounded-lg hover:bg-primary-100 transition"
                 >
-                  <Sparkles size={16} />
-                  Generar Propiedades
+                  <Edit size={16} />
+                  Editar
                 </button>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => handleEdit(type)}
-                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2 text-primary-600 bg-primary-50 rounded-lg hover:bg-primary-100 transition"
-                  >
-                    <Edit size={16} />
-                    Editar
-                  </button>
-                  <button
-                    onClick={() => handleDelete(type.id)}
-                    className="flex items-center justify-center gap-2 px-4 py-2 text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition"
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                </div>
+                <button
+                  onClick={() => handleDelete(type.id)}
+                  className="flex items-center justify-center gap-2 px-4 py-2 text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition"
+                >
+                  <Trash2 size={16} />
+                </button>
               </div>
             </div>
           ))}
