@@ -25,10 +25,38 @@ export default function Catalog() {
     description: '',
     parent_id: null
   });
+  const [availableParents, setAvailableParents] = useState([]);
 
   useEffect(() => {
     dispatch(fetchCatalogItems({ category: activeCategory }));
   }, [dispatch, activeCategory]);
+
+  // Load available parents when type changes
+  useEffect(() => {
+    const loadParents = async () => {
+      if (formData.category === 'location') {
+        if (formData.type === 'city') {
+          // Cities need departments as parents
+          const response = await dispatch(fetchCatalogItems({ category: 'location', type: 'department' })).unwrap();
+          setAvailableParents(response || []);
+        } else if (formData.type === 'zone') {
+          // Zones need cities as parents
+          const response = await dispatch(fetchCatalogItems({ category: 'location', type: 'city' })).unwrap();
+          setAvailableParents(response || []);
+        } else {
+          // Departments don't have parents
+          setAvailableParents([]);
+        }
+      } else {
+        // Other categories don't have hierarchies yet
+        setAvailableParents([]);
+      }
+    };
+
+    if (showModal) {
+      loadParents();
+    }
+  }, [formData.type, formData.category, showModal, dispatch]);
 
   const handleCategoryChange = (category) => {
     setActiveCategory(category);
@@ -160,7 +188,10 @@ export default function Catalog() {
         </div>
       ) : filteredItems.length === 0 ? (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
-          {React.createElement(getCategoryIcon(activeCategory), { className: 'mx-auto text-gray-400 mb-4', size: 48 })}
+          {(() => {
+            const Icon = getCategoryIcon(activeCategory);
+            return <Icon className="mx-auto text-gray-400 mb-4" size={48} />;
+          })()}
           <p className="text-gray-600 mb-4">No hay ítems registrados en esta categoría</p>
           <button
             onClick={handleCreate}
@@ -244,7 +275,7 @@ export default function Catalog() {
                   </label>
                   <select
                     value={formData.type}
-                    onChange={(e) => setFormData({ ...formData, type: e.target.value })}
+                    onChange={(e) => setFormData({ ...formData, type: e.target.value, parent_id: null })}
                     required
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
                   >
@@ -255,6 +286,27 @@ export default function Catalog() {
                     ))}
                   </select>
                 </div>
+
+                {availableParents.length > 0 && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      {formData.type === 'city' ? 'Departamento *' : formData.type === 'zone' ? 'Ciudad *' : 'Padre'}
+                    </label>
+                    <select
+                      value={formData.parent_id || ''}
+                      onChange={(e) => setFormData({ ...formData, parent_id: e.target.value ? parseInt(e.target.value) : null })}
+                      required
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
+                    >
+                      <option value="">Seleccionar...</option>
+                      {availableParents.map((parent) => (
+                        <option key={parent.id} value={parent.id}>
+                          {parent.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">

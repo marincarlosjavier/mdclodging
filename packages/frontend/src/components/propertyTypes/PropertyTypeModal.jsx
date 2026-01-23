@@ -32,8 +32,8 @@ export default function PropertyTypeModal({ type, onClose }) {
   const [loading, setLoading] = useState(false);
   const [catalogItems, setCatalogItems] = useState({
     departments: [],
-    cities: [],
-    zones: []
+    allCities: [],  // All cities, unfiltered
+    allZones: []    // All zones, unfiltered
   });
 
   const [formData, setFormData] = useState({
@@ -65,8 +65,8 @@ export default function PropertyTypeModal({ type, onClose }) {
 
         setCatalogItems({
           departments: departmentsRes,
-          cities: citiesRes,
-          zones: zonesRes
+          allCities: citiesRes,
+          allZones: zonesRes
         });
       } catch (error) {
         console.error('Error loading catalog items:', error);
@@ -75,6 +75,15 @@ export default function PropertyTypeModal({ type, onClose }) {
 
     loadCatalogItems();
   }, [dispatch]);
+
+  // Filtered lists based on parent selection
+  const filteredCities = formData.department_id
+    ? catalogItems.allCities.filter(city => city.parent_id === parseInt(formData.department_id))
+    : [];
+
+  const filteredZones = formData.city_id
+    ? catalogItems.allZones.filter(zone => zone.parent_id === parseInt(formData.city_id))
+    : [];
 
   useEffect(() => {
     if (type?.id) {
@@ -123,6 +132,14 @@ export default function PropertyTypeModal({ type, onClose }) {
         ...prev,
         [name]: newValue
       };
+
+      // Clear child selections when parent changes
+      if (name === 'department_id') {
+        updated.city_id = '';
+        updated.zone_id = '';
+      } else if (name === 'city_id') {
+        updated.zone_id = '';
+      }
 
       // Auto-regenerate unit names when relevant fields change
       if (name === 'room_count' || name === 'room_nomenclature_type' ||
@@ -478,10 +495,13 @@ export default function PropertyTypeModal({ type, onClose }) {
                         name="city_id"
                         value={formData.city_id}
                         onChange={handleChange}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
+                        disabled={!formData.department_id}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none disabled:bg-gray-100 disabled:cursor-not-allowed"
                       >
-                        <option value="">Seleccionar...</option>
-                        {catalogItems.cities.map((item) => (
+                        <option value="">
+                          {formData.department_id ? 'Seleccionar...' : 'Primero selecciona un departamento'}
+                        </option>
+                        {filteredCities.map((item) => (
                           <option key={item.id} value={item.id}>
                             {item.name}
                           </option>
@@ -497,10 +517,13 @@ export default function PropertyTypeModal({ type, onClose }) {
                         name="zone_id"
                         value={formData.zone_id}
                         onChange={handleChange}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
+                        disabled={!formData.city_id}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none disabled:bg-gray-100 disabled:cursor-not-allowed"
                       >
-                        <option value="">Seleccionar...</option>
-                        {catalogItems.zones.map((item) => (
+                        <option value="">
+                          {formData.city_id ? 'Seleccionar...' : 'Primero selecciona una ciudad'}
+                        </option>
+                        {filteredZones.map((item) => (
                           <option key={item.id} value={item.id}>
                             {item.name}
                           </option>
