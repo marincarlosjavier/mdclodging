@@ -82,7 +82,7 @@ router.get('/:id', asyncHandler(async (req, res) => {
 }));
 
 // POST /api/properties - Create single property manually
-router.post('/', requireRole(['admin', 'supervisor']), asyncHandler(async (req, res) => {
+router.post('/', requireRole('admin', 'supervisor'), asyncHandler(async (req, res) => {
   const { property_type_id, name, status, notes } = req.body;
 
   if (!property_type_id || !name) {
@@ -110,7 +110,7 @@ router.post('/', requireRole(['admin', 'supervisor']), asyncHandler(async (req, 
 }));
 
 // PUT /api/properties/:id - Update property
-router.put('/:id', requireRole(['admin', 'supervisor']), asyncHandler(async (req, res) => {
+router.put('/:id', requireRole('admin', 'supervisor'), asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { property_type_id, name, status, notes, is_active } = req.body;
 
