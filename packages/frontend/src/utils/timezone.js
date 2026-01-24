@@ -33,21 +33,11 @@ export function createColombiaDateTime(dateStr, timeStr) {
   const [hours, minutes] = timeStr.split(':').map(Number);
   const [year, month, day] = dateStr.split('-').map(Number);
 
-  // Create date string in Colombia timezone
-  const colombiaDateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`;
+  // Create a date in UTC representing the Colombia time
+  // Colombia is UTC-5, so we add 5 hours to get UTC
+  const utcDate = new Date(Date.UTC(year, month - 1, day, hours + 5, minutes, 0));
 
-  // Create a date treating it as Colombia time
-  const date = new Date(colombiaDateStr);
-
-  // Get the timezone offset for Colombia (UTC-5 = 300 minutes)
-  const colombiaOffset = 5 * 60; // Colombia is UTC-5
-  const localOffset = date.getTimezoneOffset(); // Browser's offset from UTC in minutes
-
-  // Adjust for the difference between local timezone and Colombia timezone
-  const offsetDiff = localOffset + colombiaOffset;
-  date.setMinutes(date.getMinutes() - offsetDiff);
-
-  return date.toISOString();
+  return utcDate.toISOString();
 }
 
 /**
