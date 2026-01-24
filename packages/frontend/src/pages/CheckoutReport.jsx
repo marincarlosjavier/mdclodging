@@ -84,8 +84,11 @@ export default function CheckoutReport() {
     }
   };
 
-  const getStatusBadge = (cleaningStatus) => {
+  const getStatusBadge = (checkout) => {
+    const { cleaning_status, actual_checkout_time } = checkout;
+
     const styles = {
+      checked_out: 'bg-orange-100 text-orange-800',
       pending: 'bg-yellow-100 text-yellow-800',
       in_progress: 'bg-blue-100 text-blue-800',
       completed: 'bg-green-100 text-green-800',
@@ -93,6 +96,7 @@ export default function CheckoutReport() {
     };
 
     const icons = {
+      checked_out: <LogOut className="w-4 h-4" />,
       pending: <AlertCircle className="w-4 h-4" />,
       in_progress: <Loader className="w-4 h-4" />,
       completed: <CheckCircle className="w-4 h-4" />,
@@ -100,13 +104,24 @@ export default function CheckoutReport() {
     };
 
     const labels = {
+      checked_out: 'Checked Out',
       pending: 'Pendiente',
       in_progress: 'En Progreso',
       completed: 'Completado',
       cancelled: 'Cancelado'
     };
 
-    if (!cleaningStatus) {
+    // If checkout has been reported, show "Checked Out" status
+    if (actual_checkout_time) {
+      return (
+        <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${styles.checked_out}`}>
+          {icons.checked_out}
+          {labels.checked_out}
+        </span>
+      );
+    }
+
+    if (!cleaning_status) {
       return (
         <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
           <AlertCircle className="w-4 h-4" />
@@ -116,9 +131,9 @@ export default function CheckoutReport() {
     }
 
     return (
-      <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${styles[cleaningStatus]}`}>
-        {icons[cleaningStatus]}
-        {labels[cleaningStatus]}
+      <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${styles[cleaning_status]}`}>
+        {icons[cleaning_status]}
+        {labels[cleaning_status]}
       </span>
     );
   };
@@ -256,10 +271,10 @@ export default function CheckoutReport() {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      {checkout.checkout_time ? (
-                        <div className="flex items-center gap-2 text-gray-700">
+                      {(checkout.actual_checkout_time || checkout.checkout_time) ? (
+                        <div className={`flex items-center gap-2 ${checkout.actual_checkout_time ? 'text-orange-700 font-medium' : 'text-gray-700'}`}>
                           <Clock className="w-4 h-4" />
-                          {formatTime(checkout.checkout_time)}
+                          {formatTime(checkout.actual_checkout_time || checkout.checkout_time)}
                         </div>
                       ) : (
                         <span className="text-gray-400">-</span>
@@ -276,20 +291,20 @@ export default function CheckoutReport() {
                       )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      {getStatusBadge(checkout.cleaning_status)}
+                      {getStatusBadge(checkout)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 print:hidden">
                       {checkout.assigned_to_name || '-'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right print:hidden">
-                      {!checkout.actual_checkout_time && checkout.reservation_status === 'active' && (
+                      {checkout.reservation_status === 'active' && (
                         <button
                           onClick={() => handleReportCheckout(checkout)}
-                          className="inline-flex items-center gap-1 px-3 py-1 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700"
-                          title="Reportar Checkout"
+                          className={`inline-flex items-center gap-1 px-3 py-1 text-white text-sm rounded-lg ${checkout.actual_checkout_time ? 'bg-orange-600 hover:bg-orange-700' : 'bg-green-600 hover:bg-green-700'}`}
+                          title={checkout.actual_checkout_time ? "Corregir Checkout" : "Reportar Checkout"}
                         >
                           <LogOut className="w-4 h-4" />
-                          Reportar
+                          {checkout.actual_checkout_time ? 'Corregir' : 'Reportar'}
                         </button>
                       )}
                     </td>
