@@ -105,49 +105,85 @@ export async function startTelegramBot() {
       // Get user session
       ctx.session = userSessions.get(ctx.telegramId.toString()) || {};
 
-      // Check if user is linked and active (except for /start and /logout commands)
-      const isStartOrLogout = ctx.message?.text === '/start' || ctx.message?.text === '/logout';
-      if (ctx.updateType !== 'callback_query' && !isStartOrLogout) {
-        if (contact.user_id && !contact.is_active) {
+      // For callback queries, just continue
+      if (ctx.updateType === 'callback_query') {
+        return await next();
+      }
+
+      // Check if user is active
+      if (contact.user_id && !contact.is_active) {
+        return ctx.reply(
+          '⛔ *Acceso Desactivado*\n\n' +
+          'Tu acceso al bot ha sido desactivado.\n\n' +
+          'Por favor contacta a tu supervisor si crees que esto es un error.',
+          { parse_mode: 'Markdown' }
+        );
+      }
+
+      // Check session timeout (if user is linked and logged in)
+      if (contact.user_id && contact.is_logged_in && contact.last_login_at) {
+        const sessionTimeout = await checkSessionTimeout(contact);
+        if (sessionTimeout.expired) {
+          // Logout user
+          await pool.query(
+            'UPDATE telegram_contacts SET is_logged_in = false WHERE telegram_id = $1',
+            [ctx.telegramId]
+          );
+
+          // Clear session
+          userSessions.delete(ctx.telegramId.toString());
+
+          // Set state to awaiting PIN
+          ctx.session.state = 'awaiting_pin';
+          userSessions.set(ctx.telegramId.toString(), ctx.session);
+
           return ctx.reply(
-            '⛔ *Acceso Desactivado*\n\n' +
-            'Tu acceso al bot ha sido desactivado.\n\n' +
-            'Por favor contacta a tu supervisor si crees que esto es un error.',
+            '⏰ *Sesión Expirada*\n\n' +
+            `Tu sesión ha expirado por inactividad (${sessionTimeout.timeoutHours} horas).\n\n` +
+            'Por favor ingresa tu PIN de 4 dígitos para continuar:',
+            { parse_mode: 'Markdown' }
+          );
+        }
+      }
+
+      // Auto-prompt for login if user is linked but not logged in
+      if (contact.user_id && !contact.is_logged_in && !ctx.session.state) {
+        // Check if user has PIN set
+        if (!contact.login_pin) {
+          // Need to set PIN first
+          ctx.session.state = 'setting_pin';
+          userSessions.set(ctx.telegramId.toString(), ctx.session);
+
+          return ctx.reply(
+            '🔐 *Configurar PIN*\n\n' +
+            'Para acceder al sistema, necesitas configurar un PIN de 4 dígitos.\n\n' +
+            '📝 Ingresa tu PIN (4 dígitos numéricos):',
             { parse_mode: 'Markdown' }
           );
         }
 
-        // Check session timeout (if user is linked and logged in)
-        if (contact.user_id && contact.is_logged_in && contact.last_login_at) {
-          const sessionTimeout = await checkSessionTimeout(contact);
-          if (sessionTimeout.expired) {
-            // Logout user
-            await pool.query(
-              'UPDATE telegram_contacts SET is_logged_in = false WHERE telegram_id = $1',
-              [ctx.telegramId]
-            );
+        // Prompt for PIN
+        ctx.session.state = 'awaiting_pin';
+        userSessions.set(ctx.telegramId.toString(), ctx.session);
 
-            // Clear session
-            userSessions.delete(ctx.telegramId.toString());
+        return ctx.reply(
+          '🔐 *Inicio de Sesión*\n\n' +
+          'Por favor ingresa tu PIN de 4 dígitos:',
+          { parse_mode: 'Markdown' }
+        );
+      }
 
-            return ctx.reply(
-              '⏰ *Sesión Expirada*\n\n' +
-              `Tu sesión ha expirado por inactividad (${sessionTimeout.timeoutHours} horas).\n\n` +
-              'Por favor usa /start para iniciar sesión nuevamente.',
-              { parse_mode: 'Markdown' }
-            );
-          }
-        }
+      // If not linked, prompt to link
+      if (!contact.user_id && !ctx.session.state) {
+        ctx.session.state = 'awaiting_link_code';
+        userSessions.set(ctx.telegramId.toString(), ctx.session);
 
-        // Require login for linked users who are not logged in
-        if (contact.user_id && !contact.is_logged_in && !ctx.session.state) {
-          return ctx.reply(
-            '🔐 *Sesión Cerrada*\n\n' +
-            'Tu sesión ha sido cerrada.\n\n' +
-            'Usa /start para iniciar sesión nuevamente.',
-            { parse_mode: 'Markdown' }
-          );
-        }
+        return ctx.reply(
+          '👋 *Bienvenido al Sistema de Gestión Hotelera*\n\n' +
+          'Para comenzar, necesitas vincular tu cuenta de Telegram.\n\n' +
+          '📝 Solicita un código de vinculación a tu administrador e ingrésalo aquí:',
+          { parse_mode: 'Markdown' }
+        );
       }
     }
 
@@ -296,42 +332,17 @@ async function getOrCreateContact(from) {
 async function handleStart(ctx) {
   const contact = ctx.contact;
 
-  if (!contact.user_id) {
-    // Not linked yet
-    return ctx.reply(
-      '👋 ¡Bienvenido al Sistema de Gestión Hotelera!\n\n' +
-      'Para comenzar, solicita un *código de vinculación* a tu supervisor y envíalo aquí.\n\n' +
-      '📝 Ejemplo: `ABC12XYZ`\n\n' +
-      'Si ya tienes un código, envíalo ahora.',
-      { parse_mode: 'Markdown' }
-    );
+  // If user is logged in, show main menu
+  if (contact.user_id && contact.is_logged_in) {
+    return await showMainMenu(ctx, contact);
   }
 
-  // Check if PIN is set
-  if (!contact.login_pin) {
-    // Linked but no PIN
-    userSessions.set(ctx.telegramId.toString(), { state: 'setting_pin', userId: contact.user_id });
-
-    return ctx.reply(
-      '🔐 Para continuar, configura tu PIN de acceso.\n\n' +
-      'Envía un PIN de *4 dígitos* (solo números):\n\n' +
-      '📝 Ejemplo: `1234`',
-      { parse_mode: 'Markdown' }
-    );
-  }
-
-  // Check if contact is active
-  if (!contact.is_active) {
-    return ctx.reply(
-      '⛔ *Acceso Desactivado*\n\n' +
-      'Tu acceso al bot ha sido desactivado.\n\n' +
-      'Por favor contacta a tu supervisor si crees que esto es un error.',
-      { parse_mode: 'Markdown' }
-    );
-  }
-
-  // Linked, has PIN, and is active - show main menu
-  await showMainMenu(ctx, contact);
+  // Otherwise, middleware will handle the login flow automatically
+  return ctx.reply(
+    '👋 *Bienvenido*\n\n' +
+    'Escribe cualquier mensaje para continuar.',
+    { parse_mode: 'Markdown' }
+  );
 }
 
 /**
