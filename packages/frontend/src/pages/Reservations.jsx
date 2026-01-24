@@ -95,11 +95,12 @@ export default function Reservations() {
         if (editingReservation && r.id === editingReservation.id) return false;
         if (r.property_id !== p.id) return false;
 
-        const rCheckIn = new Date(r.check_in_date);
-        const rCheckOut = new Date(r.check_out_date);
-        const newCheckIn = new Date(formData.check_in_date);
-        const newCheckOut = new Date(formData.check_out_date);
-        const today = new Date(getTodayInColombia());
+        // Compare dates as strings (YYYY-MM-DD format)
+        const rCheckIn = r.check_in_date;
+        const rCheckOut = r.check_out_date;
+        const newCheckIn = formData.check_in_date;
+        const newCheckOut = formData.check_out_date;
+        const today = getTodayInColombia();
 
         // Skip past reservations (checkout date before today)
         if (rCheckOut < today) return false;

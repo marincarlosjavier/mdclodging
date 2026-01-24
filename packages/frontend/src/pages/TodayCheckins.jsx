@@ -42,15 +42,15 @@ export default function TodayCheckins() {
         if (r.status === 'cancelled') return false;
         if (r.property_id !== p.id) return false;
 
-        const rCheckIn = new Date(r.check_in_date);
-        const rCheckOut = new Date(r.check_out_date);
-        const todayDate = new Date(today);
+        // Compare dates as strings (YYYY-MM-DD format)
+        const rCheckIn = r.check_in_date;
+        const rCheckOut = r.check_out_date;
 
         // Skip past reservations (checkout before today)
-        if (rCheckOut < todayDate) return false;
+        if (rCheckOut < today) return false;
 
         // Property is occupied if today is between check-in and check-out (exclusive of checkout)
-        return (todayDate >= rCheckIn && todayDate < rCheckOut);
+        return (today >= rCheckIn && today < rCheckOut);
       });
 
       return !hasReservationToday;
