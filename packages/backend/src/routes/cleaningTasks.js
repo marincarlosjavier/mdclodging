@@ -247,4 +247,28 @@ router.delete('/:id', requireRole('admin', 'supervisor'), asyncHandler(async (re
   res.json({ message: 'Cleaning task cancelled successfully' });
 }));
 
+// PUT /api/cleaning-tasks/:id/start - Start a cleaning task
+router.put('/:id/start', requireRole('admin', 'supervisor'), asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { assigned_to } = req.body;
+
+  const result = await pool.query(
+    `UPDATE cleaning_tasks
+     SET status = 'in_progress',
+         assigned_to = $1,
+         assigned_at = CASE WHEN $1 IS NOT NULL THEN NOW() ELSE NULL END,
+         started_at = NOW(),
+         updated_at = NOW()
+     WHERE id = $2 AND tenant_id = $3
+     RETURNING *`,
+    [assigned_to || null, id, req.tenantId]
+  );
+
+  if (result.rows.length === 0) {
+    return res.status(404).json({ error: 'Cleaning task not found' });
+  }
+
+  res.json(result.rows[0]);
+}));
+
 export default router;

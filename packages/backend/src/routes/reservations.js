@@ -358,6 +358,9 @@ router.put('/:id', requireRole('admin', 'supervisor'), asyncHandler(async (req, 
     const currentReservation = currentResult.rows[0];
     const isCheckoutReported = actual_checkout_time && !currentReservation.actual_checkout_time;
 
+    // Convert actual_checkout_time to Date object if it's a string
+    const actualCheckoutTimeValue = actual_checkout_time ? new Date(actual_checkout_time) : null;
+
     // Update reservation
     const result = await client.query(
       `UPDATE reservations
@@ -378,7 +381,7 @@ router.put('/:id', requireRole('admin', 'supervisor'), asyncHandler(async (req, 
            updated_at = CURRENT_TIMESTAMP
        WHERE id = $15 AND tenant_id = $16
        RETURNING *`,
-      [property_id, check_in_date, check_out_date, checkin_time, checkout_time, actual_checkout_time, adults, children, infants, has_breakfast, reference, additional_requirements, notes, status, id, req.tenantId]
+      [property_id, check_in_date, check_out_date, checkin_time, checkout_time, actualCheckoutTimeValue, adults, children, infants, has_breakfast, reference, additional_requirements, notes, status, id, req.tenantId]
     );
 
     const updatedReservation = result.rows[0];

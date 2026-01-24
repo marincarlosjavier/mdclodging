@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Calendar, Clock, Users, CheckCircle, AlertCircle, XCircle, Loader, LogOut, X } from 'lucide-react';
+import { Calendar, Clock, Users, CheckCircle, AlertCircle, XCircle, Loader, LogOut, X, Edit, Play, Timer } from 'lucide-react';
 import { useDispatch } from 'react-redux';
 import { updateReservation } from '../store/slices/reservationsSlice';
 import { toast } from 'react-toastify';
@@ -16,10 +16,23 @@ export default function CheckoutReport() {
   const [checkoutType, setCheckoutType] = useState('now'); // 'now' or 'scheduled'
   const [scheduledTime, setScheduledTime] = useState('');
   const [isPriority, setIsPriority] = useState(false);
+  const [showStartTaskModal, setShowStartTaskModal] = useState(false);
+  const [selectedTask, setSelectedTask] = useState(null);
+  const [housekeepingUsers, setHousekeepingUsers] = useState([]);
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [currentTime, setCurrentTime] = useState(new Date());
 
   useEffect(() => {
     fetchReport();
   }, [date]);
+
+  // Update current time every second for elapsed time counter
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   const fetchReport = async () => {
     setLoading(true);
@@ -81,6 +94,76 @@ export default function CheckoutReport() {
       fetchReport();
     } catch (error) {
       // Error already handled by interceptor
+    }
+  };
+
+  const handleStartTask = async (checkout) => {
+    try {
+      // Get housekeeping users who are logged in
+      const response = await api.get('/users?role=housekeeping&logged_in=true');
+      const loggedInUsers = response.data;
+
+      setSelectedTask(checkout);
+      setHousekeepingUsers(loggedInUsers);
+
+      if (loggedInUsers.length === 0) {
+        // No users logged in - show warning modal
+        setSelectedUser(null);
+        setShowStartTaskModal(true);
+      } else if (loggedInUsers.length === 1) {
+        // Only one user - assign automatically
+        await startTaskWithUser(checkout.cleaning_task_id, loggedInUsers[0].id);
+      } else {
+        // Multiple users - show selection modal
+        setSelectedUser(null);
+        setShowStartTaskModal(true);
+      }
+    } catch (error) {
+      console.error('Error fetching housekeeping users:', error);
+      toast.error('Error al obtener usuarios de housekeeping');
+    }
+  };
+
+  const startTaskWithUser = async (taskId, userId = null) => {
+    try {
+      await api.put(`/cleaning-tasks/${taskId}/start`, {
+        assigned_to: userId
+      });
+
+      const userName = userId ? housekeepingUsers.find(u => u.id === userId)?.full_name : 'sin asignar';
+      toast.success(`Tarea iniciada${userId ? ` - Asignada a ${userName}` : ' sin asignar'}`);
+
+      setShowStartTaskModal(false);
+      setSelectedTask(null);
+      setSelectedUser(null);
+      fetchReport();
+    } catch (error) {
+      console.error('Error starting task:', error);
+      toast.error('Error al iniciar la tarea');
+    }
+  };
+
+  const handleConfirmStartTask = () => {
+    if (selectedTask) {
+      startTaskWithUser(selectedTask.cleaning_task_id, selectedUser);
+    }
+  };
+
+  const calculateElapsedTime = (startedAt) => {
+    if (!startedAt) return '-';
+    const start = new Date(startedAt);
+    const elapsed = Math.floor((currentTime - start) / 1000); // seconds
+
+    const hours = Math.floor(elapsed / 3600);
+    const minutes = Math.floor((elapsed % 3600) / 60);
+    const seconds = elapsed % 60;
+
+    if (hours > 0) {
+      return `${hours}h ${minutes}m`;
+    } else if (minutes > 0) {
+      return `${minutes}m ${seconds}s`;
+    } else {
+      return `${seconds}s`;
     }
   };
 
@@ -255,7 +338,8 @@ export default function CheckoutReport() {
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Hora Reportada</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Asignado A</th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase print:hidden">Acciones</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tiempo</th>
+              <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase print:hidden">Acciones</th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
@@ -293,19 +377,42 @@ export default function CheckoutReport() {
                     <td className="px-6 py-4 whitespace-nowrap">
                       {getStatusBadge(checkout)}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 print:hidden">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                       {checkout.assigned_to_name || '-'}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right print:hidden">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {checkout.started_at ? (
+                        <div className="flex items-center gap-1 text-blue-700 font-mono text-sm">
+                          <Timer className="w-4 h-4" />
+                          {calculateElapsedTime(checkout.started_at)}
+                        </div>
+                      ) : (
+                        <span className="text-gray-400">-</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-center print:hidden">
                       {checkout.reservation_status === 'active' && (
-                        <button
-                          onClick={() => handleReportCheckout(checkout)}
-                          className={`inline-flex items-center gap-1 px-3 py-1 text-white text-sm rounded-lg ${checkout.actual_checkout_time ? 'bg-orange-600 hover:bg-orange-700' : 'bg-green-600 hover:bg-green-700'}`}
-                          title={checkout.actual_checkout_time ? "Corregir Checkout" : "Reportar Checkout"}
-                        >
-                          <LogOut className="w-4 h-4" />
-                          {checkout.actual_checkout_time ? 'Corregir' : 'Reportar'}
-                        </button>
+                        <div className="flex items-center justify-center gap-2">
+                          {/* Report/Edit Checkout Button */}
+                          <button
+                            onClick={() => handleReportCheckout(checkout)}
+                            className={`p-2 rounded-lg transition-colors ${checkout.actual_checkout_time ? 'bg-orange-100 text-orange-700 hover:bg-orange-200' : 'bg-green-100 text-green-700 hover:bg-green-200'}`}
+                            title={checkout.actual_checkout_time ? "Corregir Checkout" : "Reportar Checkout"}
+                          >
+                            {checkout.actual_checkout_time ? <Edit className="w-4 h-4" /> : <LogOut className="w-4 h-4" />}
+                          </button>
+
+                          {/* Start Task Button - only show if checkout reported and task not started */}
+                          {checkout.actual_checkout_time && !checkout.started_at && (
+                            <button
+                              onClick={() => handleStartTask(checkout)}
+                              className="p-2 rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors"
+                              title="Iniciar Tarea"
+                            >
+                              <Play className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
                       )}
                     </td>
                   </tr>
@@ -313,7 +420,7 @@ export default function CheckoutReport() {
               })
             ) : (
               <tr>
-                <td colSpan="6" className="px-6 py-12 text-center text-gray-500">
+                <td colSpan="7" className="px-6 py-12 text-center text-gray-500">
                   No hay checkouts programados para esta fecha
                 </td>
               </tr>
@@ -453,6 +560,98 @@ export default function CheckoutReport() {
                 >
                   <LogOut className="w-4 h-4" />
                   Confirmar Checkout
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Start Task Modal */}
+      {showStartTaskModal && selectedTask && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          {/* Backdrop */}
+          <div className="fixed inset-0 bg-black bg-opacity-50" onClick={() => setShowStartTaskModal(false)} />
+
+          {/* Modal */}
+          <div className="flex items-center justify-center min-h-screen p-4">
+            <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+              {/* Modal Header */}
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-bold text-gray-900">Iniciar Tarea de Limpieza</h2>
+                <button onClick={() => setShowStartTaskModal(false)} className="text-gray-400 hover:text-gray-600">
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+
+              {/* Modal Body */}
+              <div className="space-y-4">
+                <div className="p-4 bg-blue-50 rounded-lg">
+                  <p className="text-sm text-gray-700">
+                    <span className="font-semibold">Propiedad:</span> {selectedTask.property_name}
+                  </p>
+                  <p className="text-sm text-gray-700 mt-1">
+                    <span className="font-semibold">Checkout reportado:</span> {formatTime(selectedTask.actual_checkout_time)}
+                  </p>
+                </div>
+
+                {housekeepingUsers.length === 0 ? (
+                  // No users logged in
+                  <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                    <p className="text-sm text-yellow-800 font-semibold mb-2">
+                      ⚠️ No hay usuarios de housekeeping conectados
+                    </p>
+                    <p className="text-sm text-yellow-700">
+                      ¿Deseas iniciar la tarea sin asignar a nadie? La tarea quedará pendiente de asignación.
+                    </p>
+                  </div>
+                ) : (
+                  // User selection
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Asignar a:
+                    </label>
+                    <div className="space-y-2 max-h-60 overflow-y-auto">
+                      {housekeepingUsers.map((user) => (
+                        <label
+                          key={user.id}
+                          className="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50"
+                        >
+                          <input
+                            type="radio"
+                            name="assignedUser"
+                            value={user.id}
+                            checked={selectedUser === user.id}
+                            onChange={() => setSelectedUser(user.id)}
+                            className="mr-3"
+                          />
+                          <div>
+                            <div className="font-medium text-gray-900">{user.full_name}</div>
+                            <div className="text-sm text-gray-500">Housekeeping</div>
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Modal Actions */}
+              <div className="flex justify-end space-x-3 mt-6">
+                <button
+                  type="button"
+                  onClick={() => setShowStartTaskModal(false)}
+                  className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleConfirmStartTask}
+                  disabled={housekeepingUsers.length > 0 && !selectedUser}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  <Play className="w-4 h-4" />
+                  Iniciar Tarea
                 </button>
               </div>
             </div>

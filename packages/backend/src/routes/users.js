@@ -15,7 +15,7 @@ router.use(authenticate);
  * List all users in tenant
  */
 router.get('/', requireSupervisor, asyncHandler(async (req, res) => {
-  const { role, is_active } = req.query;
+  const { role, is_active, logged_in } = req.query;
 
   let query = 'SELECT id, email, full_name, role, is_active, last_login_at, created_at FROM users WHERE tenant_id = $1';
   const params = [req.tenantId];
@@ -31,6 +31,15 @@ router.get('/', requireSupervisor, asyncHandler(async (req, res) => {
     paramCount++;
     query += ` AND is_active = $${paramCount}`;
     params.push(is_active === 'true');
+  }
+
+  // Filter by logged in users (based on telegram_session_state)
+  if (logged_in === 'true') {
+    query += ` AND EXISTS (
+      SELECT 1 FROM telegram_contacts tc
+      WHERE tc.user_id = users.id
+      AND tc.session_state = 'authenticated'
+    )`;
   }
 
   query += ' ORDER BY created_at DESC';
