@@ -45,9 +45,10 @@ export default function Layout() {
     ...(hasRole('admin', 'supervisor')
       ? [
           { path: '/today-checkins', label: 'Check-ins de Hoy', icon: DoorOpen },
+          { path: '/occupancy-calendar', label: 'Calendario de Ocupación', icon: Calendar },
           { path: '/property-types', label: 'Tipos de Propiedad', icon: Building2 },
           { path: '/properties', label: 'Propiedades', icon: Building2 },
-          { path: '/reservations', label: 'Reservas', icon: Calendar },
+          { path: '/reservations', label: 'Reservas', icon: List },
           { path: '/checkin-report', label: 'Preparación Check-ins', icon: ClipboardList },
           { path: '/checkout-report', label: 'Reporte de Checkouts', icon: FileText },
           { path: '/catalog', label: 'Catálogo', icon: List },

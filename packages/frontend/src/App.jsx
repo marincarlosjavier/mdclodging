@@ -17,6 +17,7 @@ import BreakfastList from './pages/BreakfastList';
 import CheckoutReport from './pages/CheckoutReport';
 import CheckinReport from './pages/CheckinReport';
 import TodayCheckins from './pages/TodayCheckins';
+import OccupancyCalendar from './pages/OccupancyCalendar';
 import Layout from './components/Layout';
 
 // Protected Route Component
@@ -132,6 +133,14 @@ function App() {
           element={
             <ProtectedRoute allowedRoles={['admin', 'supervisor']}>
               <TodayCheckins />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="occupancy-calendar"
+          element={
+            <ProtectedRoute allowedRoles={['admin', 'supervisor']}>
+              <OccupancyCalendar />
             </ProtectedRoute>
           }
         />
