@@ -18,6 +18,7 @@ export default function Reservations() {
     property_id: '',
     check_in_date: '',
     check_out_date: '',
+    checkin_time: '15:00',
     checkout_time: '12:00',
     adults: 1,
     children: 0,
@@ -99,11 +100,10 @@ export default function Reservations() {
         const newCheckIn = new Date(formData.check_in_date);
         const newCheckOut = new Date(formData.check_out_date);
 
-        // Check for overlap
+        // Check for overlap - Allow same-day turnover (checkout date = checkin date)
+        // A property is available on its checkout date for new checkins
         return (
-          (newCheckIn <= rCheckIn && newCheckOut > rCheckIn) ||
-          (newCheckIn < rCheckOut && newCheckOut >= rCheckOut) ||
-          (newCheckIn >= rCheckIn && newCheckOut <= rCheckOut)
+          (newCheckIn < rCheckOut && newCheckOut > rCheckIn)
         );
       });
 
@@ -128,6 +128,7 @@ export default function Reservations() {
       property_id: reservation.property_id,
       check_in_date: reservation.check_in_date,
       check_out_date: reservation.check_out_date,
+      checkin_time: reservation.checkin_time || '15:00',
       checkout_time: reservation.checkout_time || '12:00',
       adults: reservation.adults,
       children: reservation.children,
@@ -153,6 +154,7 @@ export default function Reservations() {
       property_id: '',
       check_in_date: today,
       check_out_date: tomorrowStr,
+      checkin_time: '15:00',
       checkout_time: '12:00',
       adults: 1,
       children: 0,
@@ -444,21 +446,41 @@ export default function Reservations() {
                 </div>
               </div>
 
-              {/* Checkout Time */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Hora de Check-out
-                </label>
-                <input
-                  type="time"
-                  name="checkout_time"
-                  value={formData.checkout_time}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Hora estimada de salida del huésped
-                </p>
+              {/* Check-in and Check-out Times */}
+              <div className="grid grid-cols-2 gap-4">
+                {/* Checkin Time */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Hora de Check-in
+                  </label>
+                  <input
+                    type="time"
+                    name="checkin_time"
+                    value={formData.checkin_time}
+                    onChange={handleChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Hora estimada de llegada del huésped
+                  </p>
+                </div>
+
+                {/* Checkout Time */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Hora de Check-out
+                  </label>
+                  <input
+                    type="time"
+                    name="checkout_time"
+                    value={formData.checkout_time}
+                    onChange={handleChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Hora estimada de salida del huésped
+                  </p>
+                </div>
               </div>
 
               {/* Property Selection */}

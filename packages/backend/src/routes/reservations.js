@@ -236,7 +236,8 @@ router.post('/', requireRole('admin', 'supervisor'), asyncHandler(async (req, re
     property_id,
     check_in_date,
     check_out_date,
-    checkout_time,
+    checkin_time = '15:00',
+    checkout_time = '12:00',
     adults = 1,
     children = 0,
     infants = 0,
@@ -290,11 +291,11 @@ router.post('/', requireRole('admin', 'supervisor'), asyncHandler(async (req, re
     // Insert reservation
     const reservationResult = await client.query(
       `INSERT INTO reservations (
-        tenant_id, property_id, check_in_date, check_out_date, checkout_time,
+        tenant_id, property_id, check_in_date, check_out_date, checkin_time, checkout_time,
         adults, children, infants, has_breakfast, additional_requirements, notes
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
       RETURNING *`,
-      [req.tenantId, property_id, check_in_date, check_out_date, checkout_time, adults, children, infants, has_breakfast, additional_requirements, notes]
+      [req.tenantId, property_id, check_in_date, check_out_date, checkin_time, checkout_time, adults, children, infants, has_breakfast, additional_requirements, notes]
     );
 
     const reservation = reservationResult.rows[0];
@@ -323,6 +324,7 @@ router.put('/:id', requireRole('admin', 'supervisor'), asyncHandler(async (req, 
     property_id,
     check_in_date,
     check_out_date,
+    checkin_time,
     checkout_time,
     actual_checkout_time,
     adults,
@@ -358,19 +360,20 @@ router.put('/:id', requireRole('admin', 'supervisor'), asyncHandler(async (req, 
        SET property_id = COALESCE($1, property_id),
            check_in_date = COALESCE($2, check_in_date),
            check_out_date = COALESCE($3, check_out_date),
-           checkout_time = COALESCE($4, checkout_time),
-           actual_checkout_time = COALESCE($5, actual_checkout_time),
-           adults = COALESCE($6, adults),
-           children = COALESCE($7, children),
-           infants = COALESCE($8, infants),
-           has_breakfast = COALESCE($9, has_breakfast),
-           additional_requirements = COALESCE($10, additional_requirements),
-           notes = COALESCE($11, notes),
-           status = COALESCE($12, status),
+           checkin_time = COALESCE($4, checkin_time),
+           checkout_time = COALESCE($5, checkout_time),
+           actual_checkout_time = COALESCE($6, actual_checkout_time),
+           adults = COALESCE($7, adults),
+           children = COALESCE($8, children),
+           infants = COALESCE($9, infants),
+           has_breakfast = COALESCE($10, has_breakfast),
+           additional_requirements = COALESCE($11, additional_requirements),
+           notes = COALESCE($12, notes),
+           status = COALESCE($13, status),
            updated_at = CURRENT_TIMESTAMP
-       WHERE id = $13 AND tenant_id = $14
+       WHERE id = $14 AND tenant_id = $15
        RETURNING *`,
-      [property_id, check_in_date, check_out_date, checkout_time, actual_checkout_time, adults, children, infants, has_breakfast, additional_requirements, notes, status, id, req.tenantId]
+      [property_id, check_in_date, check_out_date, checkin_time, checkout_time, actual_checkout_time, adults, children, infants, has_breakfast, additional_requirements, notes, status, id, req.tenantId]
     );
 
     const updatedReservation = result.rows[0];
