@@ -125,9 +125,9 @@ export default function CheckoutReport() {
 
   const formatTime = (timeString) => {
     if (!timeString) return '-';
-    // If it's just a time (HH:MM), return it directly
-    if (/^\d{2}:\d{2}$/.test(timeString)) {
-      return timeString;
+    // If it's just a time (HH:MM or HH:MM:SS), extract HH:MM
+    if (/^\d{2}:\d{2}(:\d{2})?$/.test(timeString)) {
+      return timeString.substring(0, 5); // Return HH:MM
     }
     // Otherwise, format as Colombia time
     return formatColombiaTime(timeString, { hour: '2-digit', minute: '2-digit' });
