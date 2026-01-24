@@ -71,17 +71,26 @@ export default function OccupancyCalendar() {
 
     // Calculate start position
     let startDay = 0;
+    let checkInOffset = 0;
+
     if (checkIn > start) {
       startDay = Math.floor((checkIn - start) / (1000 * 60 * 60 * 24));
+      // Add 3/4 day offset for check-in time (3PM = 75% of day)
+      checkInOffset = 0.75;
     }
 
-    // Calculate width
+    // Calculate width in days
     const visibleCheckIn = checkIn < start ? start : checkIn;
     const visibleCheckOut = checkOut > end ? end : checkOut;
-    const days = Math.ceil((visibleCheckOut - visibleCheckIn) / (1000 * 60 * 60 * 24));
+    let days = Math.ceil((visibleCheckOut - visibleCheckIn) / (1000 * 60 * 60 * 24));
+
+    // Adjust width to account for check-in offset
+    if (checkIn >= start && checkIn < end) {
+      days = days - checkInOffset;
+    }
 
     // Calculate percentage
-    const leftPercent = (startDay / daysToShow) * 100;
+    const leftPercent = ((startDay + checkInOffset) / daysToShow) * 100;
     const widthPercent = (days / daysToShow) * 100;
 
     return {

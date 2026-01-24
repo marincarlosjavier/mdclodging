@@ -79,10 +79,15 @@ export default function Tasks() {
     e.target.value = '';
   };
 
-  const filteredTasks = tasks.filter((task) =>
-    task.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    task.location.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredTasks = tasks.filter((task) => {
+    // Only show maintenance tasks (not cleaning/housekeeping tasks)
+    const isMaintenanceTask = task.task_type !== 'cleaning' && task.task_type !== 'housekeeping';
+
+    const matchesSearch = task.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      task.location.toLowerCase().includes(searchTerm.toLowerCase());
+
+    return isMaintenanceTask && matchesSearch;
+  });
 
   const canManageTasks = ['admin', 'supervisor'].includes(user?.role);
 
@@ -100,9 +105,9 @@ export default function Tasks() {
     <div>
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Tareas</h1>
+        <h1 className="text-3xl font-bold text-gray-900 mb-2">Tareas de Mantenimiento</h1>
         <p className="text-gray-600">
-          Gestiona todas las tareas del hotel
+          Gestiona todas las tareas de mantenimiento del hotel
         </p>
       </div>
 

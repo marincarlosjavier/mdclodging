@@ -41,7 +41,7 @@ export default function Layout() {
 
   const navItems = [
     { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { path: '/tasks', label: 'Tareas', icon: ListTodo },
+    { path: '/tasks', label: 'Tareas de Mantenimiento', icon: ListTodo },
     ...(hasRole('admin', 'supervisor')
       ? [
           { path: '/today-checkins', label: 'Check-ins de Hoy', icon: DoorOpen },
