@@ -140,7 +140,7 @@ export async function startTelegramBot() {
         }
 
         // Require login for linked users who are not logged in
-        if (contact.user_id && !contact.is_logged_in && !session.state) {
+        if (contact.user_id && !contact.is_logged_in && !ctx.session.state) {
           return ctx.reply(
             '🔐 *Sesión Cerrada*\n\n' +
             'Tu sesión ha sido cerrada.\n\n' +
