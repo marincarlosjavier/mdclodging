@@ -124,6 +124,12 @@ export default function CheckoutReport() {
   };
 
   const formatTime = (timeString) => {
+    if (!timeString) return '-';
+    // If it's just a time (HH:MM), return it directly
+    if (/^\d{2}:\d{2}$/.test(timeString)) {
+      return timeString;
+    }
+    // Otherwise, format as Colombia time
     return formatColombiaTime(timeString, { hour: '2-digit', minute: '2-digit' });
   };
 
@@ -233,7 +239,7 @@ export default function CheckoutReport() {
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Hora Programada</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Hora Reportada</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase print:hidden">Asignado A</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Asignado A</th>
               <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase print:hidden">Acciones</th>
             </tr>
           </thead>
