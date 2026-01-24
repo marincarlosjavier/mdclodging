@@ -21,7 +21,9 @@ import {
   registerPayment,
   showRatesManagement,
   showPropertiesForCheckout,
-  reportCheckout
+  reportCheckout,
+  showHousekeepingStaff,
+  assignTaskToStaff
 } from './admin-handlers.js';
 
 let bot = null;
@@ -217,18 +219,25 @@ export async function startTelegramBot() {
 
   // Launch bot
   try {
-    await bot.launch();
-    console.log('✅ Telegram bot started successfully');
-
-    // Log bot info
+    // Get bot info before launching (to validate token)
     const botInfo = await bot.telegram.getMe();
     console.log(`   Bot username: @${botInfo.username}`);
-    console.log(`   Bot ID: ${botInfo.id}`);
+
+    // Launch bot in background (don't await - it runs indefinitely)
+    bot.launch().catch((error) => {
+      console.error('❌ Bot launch error:', error.message);
+      if (error.response && error.response.description) {
+        lastError = `${error.response.error_code}: ${error.response.description}`;
+      } else {
+        lastError = error.message;
+      }
+      bot = null;
+    });
 
     // Clear any previous errors
     lastError = null;
   } catch (error) {
-    console.error('❌ Failed to launch bot:', error.message);
+    console.error('❌ Failed to initialize bot:', error.message);
 
     // Store error for status reporting
     if (error.response && error.response.description) {
@@ -512,13 +521,41 @@ async function showMainMenu(ctx, contact) {
 
   const user = rows[0];
 
-  const keyboard = Markup.inlineKeyboard([
+  // Get telegram permissions for this contact
+  const { rows: permRows } = await pool.query(
+    `SELECT tpc.code
+     FROM telegram_contact_permissions tcp
+     JOIN telegram_permissions_catalog tpc ON tpc.id = tcp.permission_id
+     WHERE tcp.contact_id = $1 AND tpc.is_active = true`,
+    [contact.id]
+  );
+
+  const permissions = permRows.map(p => p.code);
+  const hasHousekeeping = permissions.includes('housekeeping');
+  const hasAdmin = permissions.includes('admin');
+
+  const buttons = [
     [Markup.button.callback('📋 Mis Tareas', 'my_tasks')],
-    [Markup.button.callback('✅ Tareas Pendientes', 'pending_tasks')],
+    [Markup.button.callback('✅ Tareas Pendientes', 'pending_tasks')]
+  ];
+
+  // Add cleaning tasks button if user has housekeeping permission
+  if (hasHousekeeping) {
+    buttons.push([Markup.button.callback('🧹 Tareas de Limpieza', 'cleaning_tasks')]);
+  }
+
+  // Add task assignment button for admin permission
+  if (hasAdmin) {
+    buttons.push([Markup.button.callback('👥 Asignar Tareas', 'assign_tasks')]);
+  }
+
+  buttons.push(
     [Markup.button.callback('📊 Mi Resumen', 'my_summary')],
     [Markup.button.callback('❓ Ayuda', 'help')],
-    [Markup.button.callback('🚪 Cerrar Sesión', 'logout')],
-  ]);
+    [Markup.button.callback('🚪 Cerrar Sesión', 'logout')]
+  );
+
+  const keyboard = Markup.inlineKeyboard(buttons);
 
   await ctx.reply(
     `🏨 *Sistema de Gestión Hotelera*\n\n` +
@@ -580,6 +617,14 @@ async function handleCallback(ctx) {
   } else if (action.startsWith('checkout_report_')) {
     const reservationId = action.split('_')[2];
     return await reportCheckout(ctx, reservationId);
+  } else if (action.startsWith('assign_select_task_')) {
+    const taskId = action.split('_')[3];
+    return await showHousekeepingStaff(ctx, taskId);
+  } else if (action.startsWith('assign_confirm_')) {
+    const parts = action.split('_');
+    const taskId = parts[2];
+    const staffId = parts[3];
+    return await assignTaskToStaff(ctx, taskId, staffId);
   }
 
   await ctx.answerCbQuery();
@@ -588,6 +633,11 @@ async function handleCallback(ctx) {
     await showMyTasks(ctx);
   } else if (action === 'pending_tasks') {
     await showPendingTasks(ctx);
+  } else if (action === 'cleaning_tasks') {
+    await showCleaningTasks(ctx);
+  } else if (action === 'assign_tasks') {
+    const { showTasksForAssignment } = await import('./admin-handlers.js');
+    await showTasksForAssignment(ctx);
   } else if (action === 'my_summary') {
     await showMySummary(ctx);
   } else if (action === 'help') {
@@ -915,11 +965,14 @@ async function handleHelp(ctx) {
     `/help - Mostrar esta ayuda\n` +
     `/logout - Cerrar sesión\n\n` +
     `*Para Housekeeping:*\n` +
-    `1. Usa /tareas para ver propiedades disponibles\n` +
-    `2. Toma una tarea (solo puedes tener una activa)\n` +
-    `3. Al llegar, presiona "▶️ Iniciar"\n` +
-    `4. Al terminar, presiona "✅ Completar"\n` +
-    `5. Al final del día, usa /liquidacion para reportar\n\n` +
+    `1. Usa 🧹 Tareas de Limpieza para ver y tomar tareas\n` +
+    `2. Al llegar, presiona "▶️ Iniciar"\n` +
+    `3. Al terminar, presiona "✅ Completar"\n` +
+    `4. Al final del día, usa /liquidacion para reportar\n\n` +
+    `*Para Admin y Supervisores:*\n` +
+    `1. Usa 👥 Asignar Tareas para asignar a empleados\n` +
+    `2. Selecciona la tarea pendiente\n` +
+    `3. Selecciona el empleado disponible\n\n` +
     `*Tipos de aseo:*\n` +
     `🚪 CHECK OUT - Aseo completo después de salida\n` +
     `🧹 STAY OVER - Aseo ligero durante estancia\n` +
@@ -1064,26 +1117,32 @@ export async function notifyCheckout(tenantId, reservationData) {
        JOIN telegram_permissions_catalog tpc ON tpc.id = tcp.permission_id
        WHERE u.tenant_id = $1
          AND tc.is_active = true
-         AND tc.is_linked = true
+         AND tc.user_id IS NOT NULL
+         AND tc.is_logged_in = true
          AND tpc.code IN ('housekeeping', 'admin')
          AND tpc.is_active = true`,
       [tenantId]
     );
 
-    const { property_name, actual_checkout_time, adults, children, infants } = reservationData;
+    const { property_name, actual_checkout_time, adults, children, infants, is_priority } = reservationData;
     const totalGuests = (adults || 0) + (children || 0) + (infants || 0);
     const timeStr = new Date(actual_checkout_time).toLocaleTimeString('es-CO', {
       hour: '2-digit',
       minute: '2-digit'
     });
 
+    const priorityHeader = is_priority ? '🔴 *PRIORIDAD* 🔴\n' : '';
+    const priorityFooter = is_priority ? '\n\n⚠️ *ATENCIÓN: Esta limpieza es PRIORITARIA*' : '';
+
     const message =
+      priorityHeader +
       `🚪 *CHECKOUT REPORTADO*\n\n` +
       `📍 Propiedad: *${property_name}*\n` +
       `⏰ Hora: ${timeStr}\n` +
       `👥 Huéspedes: ${totalGuests}\n\n` +
       `La propiedad está disponible para limpieza.\n` +
-      `Usa /tareas para ver y tomar la tarea.`;
+      `Usa /tareas para ver y tomar la tarea.` +
+      priorityFooter;
 
     // Send to all housekeeping staff
     for (const contact of result.rows) {

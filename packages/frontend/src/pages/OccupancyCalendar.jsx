@@ -69,29 +69,37 @@ export default function OccupancyCalendar() {
       return null;
     }
 
-    // Calculate start position
-    let startDay = 0;
-    let checkInOffset = 0;
+    // Both check-in and check-out at 50% of the day (noon)
+    const timeOffset = 0.5;
 
-    if (checkIn > start) {
-      startDay = Math.floor((checkIn - start) / (1000 * 60 * 60 * 24));
-      // Add 3/4 day offset for check-in time (3PM = 75% of day)
-      checkInOffset = 0.75;
-    }
-
-    // Calculate width in days
+    // Calculate start position (days from startDate)
     const visibleCheckIn = checkIn < start ? start : checkIn;
     const visibleCheckOut = checkOut > end ? end : checkOut;
-    let days = Math.ceil((visibleCheckOut - visibleCheckIn) / (1000 * 60 * 60 * 24));
 
-    // Adjust width to account for check-in offset
-    if (checkIn >= start && checkIn < end) {
-      days = days - checkInOffset;
+    let startPosition = 0;
+    if (visibleCheckIn > start) {
+      startPosition = (visibleCheckIn - start) / (1000 * 60 * 60 * 24) + timeOffset;
+    } else if (checkIn < start) {
+      // Reservation started before visible range
+      startPosition = 0;
     }
 
-    // Calculate percentage
-    const leftPercent = ((startDay + checkInOffset) / daysToShow) * 100;
-    const widthPercent = (days / daysToShow) * 100;
+    // Calculate end position
+    let endPosition = (visibleCheckOut - start) / (1000 * 60 * 60 * 24);
+    if (checkOut <= end) {
+      // Add time offset only if checkout is visible
+      endPosition += timeOffset;
+    } else {
+      // Extends beyond visible range
+      endPosition = daysToShow;
+    }
+
+    // Calculate width
+    const width = endPosition - startPosition;
+
+    // Calculate percentages
+    const leftPercent = (startPosition / daysToShow) * 100;
+    const widthPercent = (width / daysToShow) * 100;
 
     return {
       left: `${leftPercent}%`,
@@ -345,8 +353,12 @@ export default function OccupancyCalendar() {
                         return (
                           <div
                             key={reservation.id}
-                            className={`absolute top-1 bottom-1 ${color} text-white text-xs rounded px-2 py-1 cursor-pointer pointer-events-auto shadow-md flex items-center justify-between overflow-hidden`}
-                            style={style}
+                            className={`absolute ${color} text-white text-xs rounded px-2 py-0.5 cursor-pointer pointer-events-auto shadow-md flex items-center justify-between overflow-hidden`}
+                            style={{
+                              ...style,
+                              top: '25%',
+                              bottom: '25%'
+                            }}
                             onClick={(e) => handleReservationClick(reservation, e)}
                             title={`${reservation.adults + reservation.children + reservation.infants} huéspedes`}
                           >

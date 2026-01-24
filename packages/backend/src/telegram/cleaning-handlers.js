@@ -71,7 +71,7 @@ export async function showCleaningTasks(ctx) {
 
   // Get available tasks (pending, not assigned)
   const result = await pool.query(
-    `SELECT ct.id, ct.task_type, ct.checkout_reported_at, ct.scheduled_date,
+    `SELECT ct.id, ct.task_type, ct.checkout_reported_at, ct.scheduled_date, ct.is_priority,
             p.name as property_name, pt.name as property_type_name,
             r.adults, r.children, r.infants,
             cr.rate
@@ -83,7 +83,7 @@ export async function showCleaningTasks(ctx) {
      WHERE ct.tenant_id = $1
        AND ct.status = 'pending'
        AND ct.assigned_to IS NULL
-     ORDER BY ct.checkout_reported_at, ct.scheduled_date, ct.created_at
+     ORDER BY ct.is_priority DESC NULLS LAST, ct.checkout_reported_at, ct.scheduled_date, ct.created_at
      LIMIT 10`,
     [contact.tenant_id]
   );
@@ -105,8 +105,9 @@ export async function showCleaningTasks(ctx) {
     const taskLabel = TASK_TYPE_LABELS[task.task_type];
     const totalGuests = (task.adults || 0) + (task.children || 0) + (task.infants || 0);
     const rate = task.rate ? `💰 $${parseFloat(task.rate).toFixed(0)}` : '';
+    const priorityTag = task.is_priority ? ' 🔴 *PRIORIDAD*' : '';
 
-    message += `${index + 1}. ${emoji} *${taskLabel}*\n`;
+    message += `${index + 1}. ${emoji} *${taskLabel}*${priorityTag}\n`;
     message += `   📍 ${task.property_name}\n`;
     message += `   🏷️ ${task.property_type_name}\n`;
 

@@ -792,6 +792,297 @@ export async function reportCheckout(ctx, reservationId) {
   }
 }
 
+/**
+ * Show cleaning tasks available for assignment
+ */
+export async function showTasksForAssignment(ctx) {
+  const contact = ctx.contact;
+
+  if (!contact.user_id) {
+    return ctx.reply('❌ No estás vinculado al sistema.');
+  }
+
+  // Get user role
+  const { rows: userRows } = await pool.query(
+    'SELECT role FROM users WHERE id = $1',
+    [contact.user_id]
+  );
+
+  if (!userRows.length || !['admin', 'supervisor'].includes(userRows[0].role)) {
+    return ctx.reply('❌ No tienes permisos para asignar tareas.');
+  }
+
+  // Get pending cleaning tasks
+  const result = await pool.query(
+    `SELECT ct.id, ct.task_type, ct.checkout_reported_at, ct.scheduled_date, ct.is_priority,
+            p.name as property_name, pt.name as property_type_name,
+            r.adults, r.children, r.infants
+     FROM cleaning_tasks ct
+     LEFT JOIN properties p ON p.id = ct.property_id
+     LEFT JOIN property_types pt ON pt.id = p.property_type_id
+     LEFT JOIN reservations r ON r.id = ct.reservation_id
+     WHERE ct.tenant_id = $1
+       AND ct.status = 'pending'
+       AND ct.assigned_to IS NULL
+     ORDER BY ct.is_priority DESC NULLS LAST, ct.checkout_reported_at, ct.scheduled_date, ct.created_at
+     LIMIT 10`,
+    [contact.tenant_id]
+  );
+
+  if (result.rows.length === 0) {
+    return ctx.editMessageText(
+      '✨ *No hay tareas pendientes de asignar*\n\n' +
+      'Todas las tareas están asignadas o completadas.',
+      { parse_mode: 'Markdown' }
+    );
+  }
+
+  const TASK_TYPE_EMOJI = {
+    check_out: '🚪',
+    stay_over: '🧹',
+    deep_cleaning: '🧼'
+  };
+
+  const TASK_TYPE_LABELS = {
+    check_out: 'CHECK OUT',
+    stay_over: 'STAY OVER',
+    deep_cleaning: 'DEEP CLEANING'
+  };
+
+  let message = '👥 *ASIGNAR TAREAS DE LIMPIEZA*\n\n';
+  message += `Selecciona una tarea para asignar a un empleado:\n\n`;
+
+  const buttons = [];
+
+  for (const task of result.rows) {
+    const emoji = TASK_TYPE_EMOJI[task.task_type] || '🏠';
+    const typeLabel = TASK_TYPE_LABELS[task.task_type] || task.task_type;
+    const totalGuests = (task.adults || 0) + (task.children || 0) + (task.infants || 0);
+    const priorityTag = task.is_priority ? ' 🔴 *PRIORIDAD*' : '';
+    const priorityButton = task.is_priority ? '🔴 ' : '';
+
+    message += `${emoji} *${typeLabel}*${priorityTag}\n`;
+    message += `📍 ${task.property_name}\n`;
+    if (totalGuests > 0) {
+      message += `👥 ${totalGuests} huéspedes\n`;
+    }
+    message += `\n`;
+
+    buttons.push([
+      Markup.button.callback(
+        `${priorityButton}${emoji} ${task.property_name} - ${typeLabel}`,
+        `assign_select_task_${task.id}`
+      )
+    ]);
+  }
+
+  buttons.push([Markup.button.callback('🔙 Volver', 'main_menu')]);
+
+  return ctx.editMessageText(message, {
+    parse_mode: 'Markdown',
+    ...Markup.inlineKeyboard(buttons)
+  });
+}
+
+/**
+ * Show housekeeping staff to assign task to
+ */
+export async function showHousekeepingStaff(ctx, taskId) {
+  const contact = ctx.contact;
+
+  // Get task details
+  const taskResult = await pool.query(
+    `SELECT ct.*, p.name as property_name
+     FROM cleaning_tasks ct
+     LEFT JOIN properties p ON p.id = ct.property_id
+     WHERE ct.id = $1 AND ct.tenant_id = $2`,
+    [taskId, contact.tenant_id]
+  );
+
+  if (taskResult.rows.length === 0) {
+    return ctx.answerCbQuery('❌ Tarea no encontrada');
+  }
+
+  const task = taskResult.rows[0];
+
+  if (task.assigned_to) {
+    return ctx.answerCbQuery('❌ Esta tarea ya está asignada');
+  }
+
+  // Get housekeeping staff
+  const staffResult = await pool.query(
+    `SELECT u.id, u.full_name,
+            COUNT(DISTINCT ct.id) as active_tasks
+     FROM users u
+     LEFT JOIN cleaning_tasks ct ON ct.assigned_to = u.id
+       AND ct.status IN ('pending', 'in_progress')
+     WHERE u.tenant_id = $1
+       AND u.role = 'housekeeping'
+       AND u.is_active = true
+     GROUP BY u.id, u.full_name
+     ORDER BY active_tasks ASC, u.full_name`,
+    [contact.tenant_id]
+  );
+
+  if (staffResult.rows.length === 0) {
+    return ctx.editMessageText(
+      '❌ *No hay empleados de housekeeping disponibles*\n\n' +
+      'Contacta al administrador.',
+      { parse_mode: 'Markdown' }
+    );
+  }
+
+  const TASK_TYPE_LABELS = {
+    check_out: 'CHECK OUT',
+    stay_over: 'STAY OVER',
+    deep_cleaning: 'DEEP CLEANING'
+  };
+
+  let message = '👥 *ASIGNAR TAREA*\n\n';
+  message += `📍 Propiedad: *${task.property_name}*\n`;
+  message += `🧹 Tipo: ${TASK_TYPE_LABELS[task.task_type]}\n\n`;
+  message += `Selecciona el empleado:\n\n`;
+
+  const buttons = [];
+
+  for (const staff of staffResult.rows) {
+    const tasksInfo = staff.active_tasks > 0 ? ` (${staff.active_tasks} activas)` : ' ✅';
+    buttons.push([
+      Markup.button.callback(
+        `${staff.full_name}${tasksInfo}`,
+        `assign_confirm_${taskId}_${staff.id}`
+      )
+    ]);
+  }
+
+  buttons.push([Markup.button.callback('🔙 Volver', 'assign_tasks')]);
+
+  return ctx.editMessageText(message, {
+    parse_mode: 'Markdown',
+    ...Markup.inlineKeyboard(buttons)
+  });
+}
+
+/**
+ * Assign task to staff member
+ */
+export async function assignTaskToStaff(ctx, taskId, staffId) {
+  const contact = ctx.contact;
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Verify task is still available
+    const taskCheck = await client.query(
+      `SELECT ct.*, p.name as property_name, pt.name as property_type_name
+       FROM cleaning_tasks ct
+       LEFT JOIN properties p ON p.id = ct.property_id
+       LEFT JOIN property_types pt ON pt.id = p.property_type_id
+       WHERE ct.id = $1 AND ct.tenant_id = $2 AND ct.assigned_to IS NULL`,
+      [taskId, contact.tenant_id]
+    );
+
+    if (taskCheck.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return ctx.answerCbQuery('❌ Esta tarea ya no está disponible');
+    }
+
+    const task = taskCheck.rows[0];
+
+    // Get staff member info
+    const staffResult = await client.query(
+      'SELECT full_name FROM users WHERE id = $1',
+      [staffId]
+    );
+
+    if (staffResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return ctx.answerCbQuery('❌ Empleado no encontrado');
+    }
+
+    const staffName = staffResult.rows[0].full_name;
+
+    // Assign task
+    await client.query(
+      `UPDATE cleaning_tasks
+       SET assigned_to = $1,
+           assigned_at = NOW(),
+           updated_at = NOW()
+       WHERE id = $2`,
+      [staffId, taskId]
+    );
+
+    await client.query('COMMIT');
+
+    const TASK_TYPE_LABELS = {
+      check_out: 'CHECK OUT',
+      stay_over: 'STAY OVER',
+      deep_cleaning: 'DEEP CLEANING'
+    };
+
+    // Notify the assigned staff member via Telegram (if they have telegram linked)
+    const telegramResult = await pool.query(
+      `SELECT telegram_id FROM telegram_contacts
+       WHERE user_id = $1 AND is_linked = true AND is_active = true`,
+      [staffId]
+    );
+
+    if (telegramResult.rows.length > 0) {
+      const { getBotInstance } = await import('./bot.js');
+      const bot = getBotInstance(contact.tenant_id);
+
+      if (bot) {
+        try {
+          const TASK_TYPE_EMOJI = {
+            check_out: '🚪',
+            stay_over: '🧹',
+            deep_cleaning: '🧼'
+          };
+
+          const emoji = TASK_TYPE_EMOJI[task.task_type] || '🏠';
+
+          await bot.telegram.sendMessage(
+            telegramResult.rows[0].telegram_id,
+            `📋 *NUEVA TAREA ASIGNADA*\n\n` +
+            `${emoji} *${TASK_TYPE_LABELS[task.task_type]}*\n` +
+            `📍 Propiedad: *${task.property_name}*\n` +
+            `🏷️ Tipo: ${task.property_type_name}\n\n` +
+            `Asignada por tu supervisor.\n` +
+            `Usa /tareas para ver los detalles.`,
+            { parse_mode: 'Markdown' }
+          );
+        } catch (error) {
+          console.error('Error notifying staff member:', error);
+        }
+      }
+    }
+
+    await ctx.answerCbQuery('✅ Tarea asignada correctamente');
+
+    return ctx.editMessageText(
+      `✅ *Tarea Asignada*\n\n` +
+      `📍 Propiedad: *${task.property_name}*\n` +
+      `🧹 Tipo: ${TASK_TYPE_LABELS[task.task_type]}\n` +
+      `👤 Asignada a: *${staffName}*\n\n` +
+      `Se ha notificado al empleado.`,
+      {
+        parse_mode: 'Markdown',
+        ...Markup.inlineKeyboard([
+          [Markup.button.callback('👥 Asignar Otra', 'assign_tasks')],
+          [Markup.button.callback('🔙 Menú Principal', 'main_menu')]
+        ])
+      }
+    );
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Error assigning task:', error);
+    return ctx.answerCbQuery('❌ Error asignando tarea');
+  } finally {
+    client.release();
+  }
+}
+
 export default {
   showAdminMenu,
   showPendingSettlements,
@@ -804,5 +1095,8 @@ export default {
   registerPayment,
   showRatesManagement,
   showPropertiesForCheckout,
-  reportCheckout
+  reportCheckout,
+  showTasksForAssignment,
+  showHousekeepingStaff,
+  assignTaskToStaff
 };

@@ -21,6 +21,7 @@ export default function TodayCheckins() {
     children: 0,
     infants: 0,
     has_breakfast: false,
+    reference: '',
     additional_requirements: '',
     notes: ''
   });
@@ -84,6 +85,7 @@ export default function TodayCheckins() {
       children: 0,
       infants: 0,
       has_breakfast: false,
+      reference: '',
       additional_requirements: '',
       notes: ''
     });
@@ -350,6 +352,24 @@ export default function TodayCheckins() {
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
+              </div>
+
+              {/* Reference */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Referencia
+                </label>
+                <input
+                  type="text"
+                  name="reference"
+                  value={formData.reference}
+                  onChange={handleChange}
+                  placeholder="Nombre del huésped, número de reserva, etc."
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Identificación de la reserva (nombre del huésped, número de confirmación, etc.)
+                </p>
               </div>
 
               {/* Guests */}
