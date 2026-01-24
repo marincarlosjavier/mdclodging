@@ -16,6 +16,7 @@ import CleaningSettlements from './pages/CleaningSettlements';
 import BreakfastList from './pages/BreakfastList';
 import CheckoutReport from './pages/CheckoutReport';
 import CheckinReport from './pages/CheckinReport';
+import TodayCheckins from './pages/TodayCheckins';
 import Layout from './components/Layout';
 
 // Protected Route Component
@@ -123,6 +124,14 @@ function App() {
           element={
             <ProtectedRoute allowedRoles={['admin', 'supervisor', 'staff']}>
               <CheckinReport />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="today-checkins"
+          element={
+            <ProtectedRoute allowedRoles={['admin', 'supervisor']}>
+              <TodayCheckins />
             </ProtectedRoute>
           }
         />

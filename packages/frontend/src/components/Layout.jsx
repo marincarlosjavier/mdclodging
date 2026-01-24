@@ -44,10 +44,11 @@ export default function Layout() {
     { path: '/tasks', label: 'Tareas', icon: ListTodo },
     ...(hasRole('admin', 'supervisor')
       ? [
+          { path: '/today-checkins', label: 'Check-ins de Hoy', icon: DoorOpen },
           { path: '/property-types', label: 'Tipos de Propiedad', icon: Building2 },
           { path: '/properties', label: 'Propiedades', icon: Building2 },
           { path: '/reservations', label: 'Reservas', icon: Calendar },
-          { path: '/checkin-report', label: 'Preparación Check-ins', icon: DoorOpen },
+          { path: '/checkin-report', label: 'Preparación Check-ins', icon: ClipboardList },
           { path: '/checkout-report', label: 'Reporte de Checkouts', icon: FileText },
           { path: '/catalog', label: 'Catálogo', icon: List },
           { path: '/users', label: 'Usuarios', icon: Users },
