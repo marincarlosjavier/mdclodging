@@ -46,6 +46,9 @@ export default function TodayCheckins() {
         const rCheckOut = new Date(r.check_out_date);
         const todayDate = new Date(today);
 
+        // Skip past reservations (checkout before today)
+        if (rCheckOut < todayDate) return false;
+
         // Property is occupied if today is between check-in and check-out (exclusive of checkout)
         return (todayDate >= rCheckIn && todayDate < rCheckOut);
       });

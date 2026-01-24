@@ -99,6 +99,10 @@ export default function Reservations() {
         const rCheckOut = new Date(r.check_out_date);
         const newCheckIn = new Date(formData.check_in_date);
         const newCheckOut = new Date(formData.check_out_date);
+        const today = new Date(getTodayInColombia());
+
+        // Skip past reservations (checkout date before today)
+        if (rCheckOut < today) return false;
 
         // Check for overlap - Allow same-day turnover (checkout date = checkin date)
         // A property is available on its checkout date for new checkins

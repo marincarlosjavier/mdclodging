@@ -506,6 +506,7 @@ async function showMainMenu(ctx, contact) {
     [Markup.button.callback('✅ Tareas Pendientes', 'pending_tasks')],
     [Markup.button.callback('📊 Mi Resumen', 'my_summary')],
     [Markup.button.callback('❓ Ayuda', 'help')],
+    [Markup.button.callback('🚪 Cerrar Sesión', 'logout')],
   ]);
 
   await ctx.reply(
@@ -580,6 +581,8 @@ async function handleCallback(ctx) {
     await showMySummary(ctx);
   } else if (action === 'help') {
     await handleHelpCallback(ctx);
+  } else if (action === 'logout') {
+    await handleLogoutCallback(ctx);
   } else if (action === 'main_menu') {
     await showMainMenu(ctx, ctx.contact);
   } else if (action.startsWith('task_')) {
@@ -939,6 +942,29 @@ async function handleLogoutCommand(ctx) {
   } catch (error) {
     console.error('Error in logout:', error);
     ctx.reply('❌ Error al cerrar sesión. Intenta nuevamente.');
+  }
+}
+
+async function handleLogoutCallback(ctx) {
+  try {
+    // Update database
+    await pool.query(
+      'UPDATE telegram_contacts SET is_logged_in = false WHERE telegram_id = $1',
+      [ctx.telegramId]
+    );
+
+    // Clear session
+    userSessions.delete(ctx.telegramId.toString());
+
+    await ctx.editMessageText(
+      '👋 *Sesión Cerrada*\n\n' +
+      'Has cerrado sesión correctamente.\n\n' +
+      'Usa /start para iniciar sesión nuevamente.',
+      { parse_mode: 'Markdown' }
+    );
+  } catch (error) {
+    console.error('Error in logout:', error);
+    await ctx.answerCbQuery('❌ Error al cerrar sesión');
   }
 }
 
