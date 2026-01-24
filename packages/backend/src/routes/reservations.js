@@ -143,7 +143,7 @@ router.get('/checkout-report', asyncHandler(async (req, res) => {
     `SELECT
       r.id,
       r.check_out_date,
-      r.checkout_time,
+      COALESCE(r.checkout_time, '12:00') as checkout_time,
       r.actual_checkout_time,
       r.adults,
       r.children,
@@ -156,6 +156,7 @@ router.get('/checkout-report', asyncHandler(async (req, res) => {
       ct.checkout_reported_at,
       ct.assigned_to,
       ct.assigned_at,
+      ct.started_at,
       ct.completed_at,
       u.full_name as assigned_to_name
      FROM reservations r
@@ -166,7 +167,7 @@ router.get('/checkout-report', asyncHandler(async (req, res) => {
      WHERE r.tenant_id = $1
        AND r.check_out_date = $2
        AND r.status = 'active'
-     ORDER BY r.checkout_time, r.actual_checkout_time, p.name`,
+     ORDER BY COALESCE(r.checkout_time, '12:00'), r.actual_checkout_time, p.name`,
     [req.tenantId, targetDate]
   );
 
@@ -242,6 +243,7 @@ router.post('/', requireRole('admin', 'supervisor'), asyncHandler(async (req, re
     children = 0,
     infants = 0,
     has_breakfast = false,
+    reference,
     additional_requirements,
     notes
   } = req.body;
@@ -292,10 +294,10 @@ router.post('/', requireRole('admin', 'supervisor'), asyncHandler(async (req, re
     const reservationResult = await client.query(
       `INSERT INTO reservations (
         tenant_id, property_id, check_in_date, check_out_date, checkin_time, checkout_time,
-        adults, children, infants, has_breakfast, additional_requirements, notes
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        adults, children, infants, has_breakfast, reference, additional_requirements, notes
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
       RETURNING *`,
-      [req.tenantId, property_id, check_in_date, check_out_date, checkin_time, checkout_time, adults, children, infants, has_breakfast, additional_requirements, notes]
+      [req.tenantId, property_id, check_in_date, check_out_date, checkin_time, checkout_time, adults, children, infants, has_breakfast, reference, additional_requirements, notes]
     );
 
     const reservation = reservationResult.rows[0];
@@ -331,9 +333,11 @@ router.put('/:id', requireRole('admin', 'supervisor'), asyncHandler(async (req, 
     children,
     infants,
     has_breakfast,
+    reference,
     additional_requirements,
     notes,
-    status
+    status,
+    is_priority
   } = req.body;
 
   const client = await pool.connect();
@@ -367,13 +371,14 @@ router.put('/:id', requireRole('admin', 'supervisor'), asyncHandler(async (req, 
            children = COALESCE($8, children),
            infants = COALESCE($9, infants),
            has_breakfast = COALESCE($10, has_breakfast),
-           additional_requirements = COALESCE($11, additional_requirements),
-           notes = COALESCE($12, notes),
-           status = COALESCE($13, status),
+           reference = COALESCE($11, reference),
+           additional_requirements = COALESCE($12, additional_requirements),
+           notes = COALESCE($13, notes),
+           status = COALESCE($14, status),
            updated_at = CURRENT_TIMESTAMP
-       WHERE id = $14 AND tenant_id = $15
+       WHERE id = $15 AND tenant_id = $16
        RETURNING *`,
-      [property_id, check_in_date, check_out_date, checkin_time, checkout_time, actual_checkout_time, adults, children, infants, has_breakfast, additional_requirements, notes, status, id, req.tenantId]
+      [property_id, check_in_date, check_out_date, checkin_time, checkout_time, actual_checkout_time, adults, children, infants, has_breakfast, reference, additional_requirements, notes, status, id, req.tenantId]
     );
 
     const updatedReservation = result.rows[0];
@@ -393,18 +398,19 @@ router.put('/:id', requireRole('admin', 'supervisor'), asyncHandler(async (req, 
           `UPDATE cleaning_tasks
            SET status = 'pending',
                checkout_reported_at = NOW(),
+               is_priority = $2,
                updated_at = CURRENT_TIMESTAMP
            WHERE id = $1`,
-          [taskCheck.rows[0].id]
+          [taskCheck.rows[0].id, is_priority || false]
         );
       } else {
         // Create new checkout cleaning task
         await client.query(
           `INSERT INTO cleaning_tasks (
             tenant_id, property_id, reservation_id, task_type,
-            scheduled_date, status, checkout_reported_at
-          ) VALUES ($1, $2, $3, 'check_out', $4, 'pending', NOW())`,
-          [req.tenantId, updatedReservation.property_id, id, new Date()]
+            scheduled_date, status, checkout_reported_at, is_priority
+          ) VALUES ($1, $2, $3, 'check_out', $4, 'pending', NOW(), $5)`,
+          [req.tenantId, updatedReservation.property_id, id, new Date(), is_priority || false]
         );
       }
 
@@ -414,7 +420,8 @@ router.put('/:id', requireRole('admin', 'supervisor'), asyncHandler(async (req, 
         actual_checkout_time,
         adults: updatedReservation.adults,
         children: updatedReservation.children,
-        infants: updatedReservation.infants
+        infants: updatedReservation.infants,
+        is_priority: is_priority || false
       });
     }
 

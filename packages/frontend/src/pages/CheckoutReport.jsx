@@ -15,6 +15,7 @@ export default function CheckoutReport() {
   const [selectedCheckout, setSelectedCheckout] = useState(null);
   const [checkoutType, setCheckoutType] = useState('now'); // 'now' or 'scheduled'
   const [scheduledTime, setScheduledTime] = useState('');
+  const [isPriority, setIsPriority] = useState(false);
 
   useEffect(() => {
     fetchReport();
@@ -36,6 +37,7 @@ export default function CheckoutReport() {
     setSelectedCheckout(checkout);
     setCheckoutType('now');
     setScheduledTime('');
+    setIsPriority(false);
     setShowCheckoutModal(true);
   };
 
@@ -61,16 +63,21 @@ export default function CheckoutReport() {
 
       await dispatch(updateReservation({
         id: selectedCheckout.id,
-        data: { actual_checkout_time: actualCheckoutTime }
+        data: {
+          actual_checkout_time: actualCheckoutTime,
+          is_priority: isPriority
+        }
       })).unwrap();
 
       const timeStr = checkoutType === 'now' ? 'inmediato' : `a las ${scheduledTime}`;
-      toast.success(`Checkout reportado correctamente ${timeStr}. Notificación enviada a housekeeping.`);
+      const priorityMsg = isPriority ? ' [PRIORIDAD]' : '';
+      toast.success(`Checkout reportado correctamente ${timeStr}${priorityMsg}. Notificación enviada a housekeeping.`);
 
       setShowCheckoutModal(false);
       setSelectedCheckout(null);
       setCheckoutType('now');
       setScheduledTime('');
+      setIsPriority(false);
       fetchReport();
     } catch (error) {
       // Error already handled by interceptor
@@ -243,20 +250,20 @@ export default function CheckoutReport() {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      {checkout.actual_checkout_time ? (
-                        <div className="flex items-center gap-2 text-blue-700 font-medium">
+                      {checkout.checkout_time ? (
+                        <div className="flex items-center gap-2 text-gray-700">
                           <Clock className="w-4 h-4" />
-                          {formatTime(checkout.actual_checkout_time)}
+                          {formatTime(checkout.checkout_time)}
                         </div>
                       ) : (
                         <span className="text-gray-400">-</span>
                       )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      {checkout.assigned_at ? (
+                      {checkout.started_at ? (
                         <div className="flex items-center gap-2 text-green-700 font-medium">
                           <CheckCircle className="w-4 h-4" />
-                          {formatTime(checkout.assigned_at)}
+                          {formatTime(checkout.started_at)}
                         </div>
                       ) : (
                         <span className="text-gray-400">-</span>
@@ -387,6 +394,20 @@ export default function CheckoutReport() {
                     </p>
                   </div>
                 )}
+
+                {/* Priority Checkbox */}
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    id="isPriority"
+                    checked={isPriority}
+                    onChange={(e) => setIsPriority(e.target.checked)}
+                    className="w-4 h-4 text-red-600 border-gray-300 rounded focus:ring-red-500"
+                  />
+                  <label htmlFor="isPriority" className="ml-2 text-sm font-medium text-gray-700">
+                    🔴 Marcar como <span className="text-red-600">PRIORIDAD</span>
+                  </label>
+                </div>
 
                 <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
                   <p className="text-sm text-yellow-800">
