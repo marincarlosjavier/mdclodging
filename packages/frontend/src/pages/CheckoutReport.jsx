@@ -149,22 +149,94 @@ export default function CheckoutReport() {
     }
   };
 
-  const calculateElapsedTime = (startedAt) => {
-    if (!startedAt) return '-';
-    const start = new Date(startedAt);
-    const elapsed = Math.floor((currentTime - start) / 1000); // seconds
+  const handleCancelCheckout = async () => {
+    try {
+      await dispatch(updateReservation({
+        id: selectedCheckout.id,
+        data: {
+          actual_checkout_time: null
+        }
+      })).unwrap();
 
-    const hours = Math.floor(elapsed / 3600);
-    const minutes = Math.floor((elapsed % 3600) / 60);
-    const seconds = elapsed % 60;
-
-    if (hours > 0) {
-      return `${hours}h ${minutes}m`;
-    } else if (minutes > 0) {
-      return `${minutes}m ${seconds}s`;
-    } else {
-      return `${seconds}s`;
+      toast.success('Checkout cancelado correctamente');
+      setShowCheckoutModal(false);
+      setSelectedCheckout(null);
+      fetchReport();
+    } catch (error) {
+      toast.error('Error al cancelar checkout');
     }
+  };
+
+  const handleCompleteTask = async (checkout) => {
+    try {
+      await api.put(`/cleaning-tasks/${checkout.cleaning_task_id}/complete`);
+      toast.success('Tarea completada correctamente');
+      fetchReport();
+    } catch (error) {
+      console.error('Error completing task:', error);
+      toast.error('Error al completar la tarea');
+    }
+  };
+
+  const calculateElapsedTime = (checkout) => {
+    const { actual_checkout_time, started_at, completed_at } = checkout;
+
+    // No checkout reported yet
+    if (!actual_checkout_time) {
+      return { time: '-', color: 'text-gray-400', label: '' };
+    }
+
+    // Checkout reported, waiting to start
+    if (actual_checkout_time && !started_at) {
+      const checkoutTime = new Date(actual_checkout_time);
+      const elapsed = Math.floor((currentTime - checkoutTime) / 1000);
+
+      const hours = Math.floor(elapsed / 3600);
+      const minutes = Math.floor((elapsed % 3600) / 60);
+      const seconds = elapsed % 60;
+
+      let timeStr = '';
+      if (hours > 0) timeStr = `${hours}h ${minutes}m`;
+      else if (minutes > 0) timeStr = `${minutes}m ${seconds}s`;
+      else timeStr = `${seconds}s`;
+
+      return { time: timeStr, color: 'text-orange-700', label: 'Esperando inicio' };
+    }
+
+    // Task started, in progress
+    if (started_at && !completed_at) {
+      const startTime = new Date(started_at);
+      const elapsed = Math.floor((currentTime - startTime) / 1000);
+
+      const hours = Math.floor(elapsed / 3600);
+      const minutes = Math.floor((elapsed % 3600) / 60);
+      const seconds = elapsed % 60;
+
+      let timeStr = '';
+      if (hours > 0) timeStr = `${hours}h ${minutes}m`;
+      else if (minutes > 0) timeStr = `${minutes}m ${seconds}s`;
+      else timeStr = `${seconds}s`;
+
+      return { time: timeStr, color: 'text-blue-700', label: 'En progreso' };
+    }
+
+    // Task completed
+    if (completed_at) {
+      const startTime = new Date(started_at);
+      const endTime = new Date(completed_at);
+      const elapsed = Math.floor((endTime - startTime) / 1000);
+
+      const hours = Math.floor(elapsed / 3600);
+      const minutes = Math.floor((elapsed % 3600) / 60);
+
+      let timeStr = '';
+      if (hours > 0) timeStr = `${hours}h ${minutes}m`;
+      else timeStr = `${minutes}m`;
+
+      return { time: timeStr, color: 'text-green-700', label: 'Completado' };
+    }
+
+    return { time: '-', color: 'text-gray-400', label: '' };
   };
 
   const getStatusBadge = (checkout) => {
@@ -381,14 +453,23 @@ export default function CheckoutReport() {
                       {checkout.assigned_to_name || '-'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      {checkout.started_at ? (
-                        <div className="flex items-center gap-1 text-blue-700 font-mono text-sm">
-                          <Timer className="w-4 h-4" />
-                          {calculateElapsedTime(checkout.started_at)}
-                        </div>
-                      ) : (
-                        <span className="text-gray-400">-</span>
-                      )}
+                      {(() => {
+                        const timeData = calculateElapsedTime(checkout);
+                        if (timeData.time === '-') {
+                          return <span className="text-gray-400">-</span>;
+                        }
+                        return (
+                          <div className="flex flex-col">
+                            <div className={`flex items-center gap-1 font-mono text-sm ${timeData.color}`}>
+                              <Timer className="w-4 h-4" />
+                              {timeData.time}
+                            </div>
+                            {timeData.label && (
+                              <span className="text-xs text-gray-500 ml-5">{timeData.label}</span>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-center print:hidden">
                       {checkout.reservation_status === 'active' && (
@@ -410,6 +491,17 @@ export default function CheckoutReport() {
                               title="Iniciar Tarea"
                             >
                               <Play className="w-4 h-4" />
+                            </button>
+                          )}
+
+                          {/* Complete Task Button - only show if task started but not completed */}
+                          {checkout.started_at && !checkout.completed_at && (
+                            <button
+                              onClick={() => handleCompleteTask(checkout)}
+                              className="p-2 rounded-lg bg-green-100 text-green-700 hover:bg-green-200 transition-colors"
+                              title="Terminar Tarea"
+                            >
+                              <CheckCircle className="w-4 h-4" />
                             </button>
                           )}
                         </div>
@@ -545,22 +637,38 @@ export default function CheckoutReport() {
               </div>
 
               {/* Modal Actions */}
-              <div className="flex justify-end space-x-3 mt-6">
-                <button
-                  type="button"
-                  onClick={() => setShowCheckoutModal(false)}
-                  className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={handleConfirmCheckout}
-                  disabled={checkoutType === 'scheduled' && !scheduledTime}
-                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                >
-                  <LogOut className="w-4 h-4" />
-                  Confirmar Checkout
-                </button>
+              <div className="flex justify-between items-center mt-6">
+                {/* Cancel Checkout Button - only show when editing existing checkout */}
+                {selectedCheckout.actual_checkout_time ? (
+                  <button
+                    type="button"
+                    onClick={handleCancelCheckout}
+                    className="px-4 py-2 text-red-700 bg-red-100 rounded-lg hover:bg-red-200 flex items-center gap-2"
+                  >
+                    <XCircle className="w-4 h-4" />
+                    Cancelar Checkout
+                  </button>
+                ) : (
+                  <div></div>
+                )}
+
+                <div className="flex space-x-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowCheckoutModal(false)}
+                    className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+                  >
+                    Cerrar
+                  </button>
+                  <button
+                    onClick={handleConfirmCheckout}
+                    disabled={checkoutType === 'scheduled' && !scheduledTime}
+                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    {selectedCheckout.actual_checkout_time ? 'Actualizar' : 'Confirmar'} Checkout
+                  </button>
+                </div>
               </div>
             </div>
           </div>

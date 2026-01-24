@@ -271,4 +271,26 @@ router.put('/:id/start', requireRole('admin', 'supervisor'), asyncHandler(async 
   res.json(result.rows[0]);
 }));
 
+// PUT /api/cleaning-tasks/:id/complete - Complete a cleaning task
+router.put('/:id/complete', requireRole('admin', 'supervisor'), asyncHandler(async (req, res) => {
+  const { id } = req.params;
+
+  const result = await pool.query(
+    `UPDATE cleaning_tasks
+     SET status = 'completed',
+         completed_at = NOW(),
+         completed_by = $1,
+         updated_at = NOW()
+     WHERE id = $2 AND tenant_id = $3
+     RETURNING *`,
+    [req.userId, id, req.tenantId]
+  );
+
+  if (result.rows.length === 0) {
+    return res.status(404).json({ error: 'Cleaning task not found' });
+  }
+
+  res.json(result.rows[0]);
+}));
+
 export default router;
