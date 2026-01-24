@@ -105,13 +105,46 @@ export async function startTelegramBot() {
       // Get user session
       ctx.session = userSessions.get(ctx.telegramId.toString()) || {};
 
-      // Check if user is linked and active (except for /start command)
-      if (ctx.updateType !== 'callback_query' && ctx.message?.text !== '/start') {
+      // Check if user is linked and active (except for /start and /logout commands)
+      const isStartOrLogout = ctx.message?.text === '/start' || ctx.message?.text === '/logout';
+      if (ctx.updateType !== 'callback_query' && !isStartOrLogout) {
         if (contact.user_id && !contact.is_active) {
           return ctx.reply(
             '⛔ *Acceso Desactivado*\n\n' +
             'Tu acceso al bot ha sido desactivado.\n\n' +
             'Por favor contacta a tu supervisor si crees que esto es un error.',
+            { parse_mode: 'Markdown' }
+          );
+        }
+
+        // Check session timeout (if user is linked and logged in)
+        if (contact.user_id && contact.is_logged_in && contact.last_login_at) {
+          const sessionTimeout = await checkSessionTimeout(contact);
+          if (sessionTimeout.expired) {
+            // Logout user
+            await pool.query(
+              'UPDATE telegram_contacts SET is_logged_in = false WHERE telegram_id = $1',
+              [ctx.telegramId]
+            );
+
+            // Clear session
+            userSessions.delete(ctx.telegramId.toString());
+
+            return ctx.reply(
+              '⏰ *Sesión Expirada*\n\n' +
+              `Tu sesión ha expirado por inactividad (${sessionTimeout.timeoutHours} horas).\n\n` +
+              'Por favor usa /start para iniciar sesión nuevamente.',
+              { parse_mode: 'Markdown' }
+            );
+          }
+        }
+
+        // Require login for linked users who are not logged in
+        if (contact.user_id && !contact.is_logged_in && !session.state) {
+          return ctx.reply(
+            '🔐 *Sesión Cerrada*\n\n' +
+            'Tu sesión ha sido cerrada.\n\n' +
+            'Usa /start para iniciar sesión nuevamente.',
             { parse_mode: 'Markdown' }
           );
         }
@@ -128,7 +161,7 @@ export async function startTelegramBot() {
   bot.command('liquidacion', showSettlementStatus);  // Settlement status
   bot.command('admin', showAdminMenu);  // Admin menu
   bot.command('help', handleHelp);
-  bot.command('logout', handleLogout);
+  bot.command('logout', handleLogoutCommand);
   bot.command('cancel', handleCancel);
 
   // Text handlers (link codes, PIN, notes, etc.)
@@ -187,6 +220,38 @@ export function stopTelegramBot() {
     bot.stop();
     bot = null;
     console.log('✅ Telegram bot stopped');
+  }
+}
+
+/**
+ * Check if session has expired
+ */
+async function checkSessionTimeout(contact) {
+  try {
+    // Get tenant's session timeout setting
+    const tenantResult = await pool.query(
+      'SELECT telegram_session_timeout_hours FROM tenants WHERE id = $1',
+      [contact.tenant_id]
+    );
+
+    const timeoutHours = tenantResult.rows[0]?.telegram_session_timeout_hours || 8;
+
+    if (!contact.last_login_at) {
+      return { expired: true, timeoutHours };
+    }
+
+    const lastLogin = new Date(contact.last_login_at);
+    const now = new Date();
+    const hoursSinceLogin = (now - lastLogin) / (1000 * 60 * 60);
+
+    return {
+      expired: hoursSinceLogin >= timeoutHours,
+      timeoutHours,
+      hoursSinceLogin
+    };
+  } catch (error) {
+    console.error('Error checking session timeout:', error);
+    return { expired: false, timeoutHours: 8 };
   }
 }
 
@@ -390,10 +455,12 @@ async function handlePinSetup(ctx, pin) {
   // Hash PIN
   const hashedPin = await bcrypt.hash(pin, 10);
 
-  // Save PIN
+  // Save PIN and mark as logged in
   await pool.query(
     `UPDATE telegram_contacts SET
       login_pin = $1,
+      is_logged_in = true,
+      last_login_at = NOW(),
       updated_at = NOW()
      WHERE telegram_id = $2`,
     [hashedPin, ctx.telegramId]
@@ -852,9 +919,27 @@ async function handleHelpCallback(ctx) {
   await handleHelp(ctx);
 }
 
-async function handleLogout(ctx) {
-  userSessions.delete(ctx.telegramId.toString());
-  ctx.reply('👋 Sesión cerrada. Usa /start para iniciar nuevamente.');
+async function handleLogoutCommand(ctx) {
+  try {
+    // Update database
+    await pool.query(
+      'UPDATE telegram_contacts SET is_logged_in = false WHERE telegram_id = $1',
+      [ctx.telegramId]
+    );
+
+    // Clear session
+    userSessions.delete(ctx.telegramId.toString());
+
+    ctx.reply(
+      '👋 *Sesión Cerrada*\n\n' +
+      'Has cerrado sesión correctamente.\n\n' +
+      'Usa /start para iniciar sesión nuevamente.',
+      { parse_mode: 'Markdown' }
+    );
+  } catch (error) {
+    console.error('Error in logout:', error);
+    ctx.reply('❌ Error al cerrar sesión. Intenta nuevamente.');
+  }
 }
 
 async function handleCancel(ctx) {
@@ -911,6 +996,12 @@ async function handlePinLogin(ctx, pin) {
   if (!validPin) {
     return ctx.reply('❌ PIN incorrecto. Intenta nuevamente.');
   }
+
+  // Mark user as logged in
+  await pool.query(
+    'UPDATE telegram_contacts SET is_logged_in = true, last_login_at = NOW() WHERE telegram_id = $1',
+    [ctx.telegramId]
+  );
 
   userSessions.delete(ctx.telegramId.toString());
   ctx.reply('✅ Acceso concedido.');
