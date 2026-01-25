@@ -192,8 +192,9 @@ router.get('/checkout-report', asyncHandler(async (req, res) => {
     });
   }
 
-  // Allow checked_out reservations when showing completed tasks or checked_out filter
-  const reservationStatusCondition = (statusList.includes('completed') || statusList.includes('checked_out') || statusList.includes('in_progress'))
+  // Allow checked_out reservations when showing any cleaning task status
+  // (pending, checked_out, in_progress, or completed)
+  const reservationStatusCondition = (statusList.includes('pending') || statusList.includes('completed') || statusList.includes('checked_out') || statusList.includes('in_progress'))
     ? `r.status IN ('active', 'checked_in', 'checked_out')`
     : `r.status IN ('active', 'checked_in')`;
 
