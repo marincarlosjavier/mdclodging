@@ -51,9 +51,10 @@ export default function Reservations() {
     dispatch(fetchReservations());
     dispatch(fetchProperties());
     fetchCleaningTasks();
+    fetchHousekeepingReport(); // Load housekeeping data for the counter
   }, [dispatch]);
 
-  // Fetch housekeeping report when filter is active
+  // Refresh housekeeping report when filter becomes active
   useEffect(() => {
     if (activeFilter === 'housekeeping') {
       fetchHousekeepingReport();
@@ -80,7 +81,9 @@ export default function Reservations() {
   const fetchHousekeepingReport = async () => {
     try {
       const today = getTodayInColombia();
-      const response = await api.get(`/reservations/checkout-report?date=${today}&statuses=pending,checked_out,in_progress`);
+      // Only show checked_out (checkout reported, waiting to start) and in_progress
+      // Do NOT show "pending" (waiting for checkout)
+      const response = await api.get(`/reservations/checkout-report?date=${today}&statuses=checked_out,in_progress`);
       setHousekeepingReport(response.data.checkouts || []);
     } catch (error) {
       console.error('Error fetching housekeeping report:', error);
@@ -168,7 +171,17 @@ export default function Reservations() {
     return { time: '-', color: 'text-gray-400' };
   };
 
-  const getCleaningStatusBadge = (status) => {
+  const getCleaningStatusBadge = (checkout) => {
+    // If pending and no actual_checkout_time, it's waiting for checkout
+    if (checkout.cleaning_status === 'pending' && !checkout.actual_checkout_time) {
+      return (
+        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+          <Clock className="w-3 h-3" />
+          Esp. Checkout
+        </span>
+      );
+    }
+
     const styles = {
       pending: 'bg-yellow-100 text-yellow-800',
       in_progress: 'bg-blue-100 text-blue-800',
@@ -187,7 +200,7 @@ export default function Reservations() {
       completed: 'Listo'
     };
 
-    if (!status) {
+    if (!checkout.cleaning_status) {
       return (
         <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
           <AlertCircle className="w-3 h-3" />
@@ -197,9 +210,9 @@ export default function Reservations() {
     }
 
     return (
-      <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs font-medium ${styles[status] || 'bg-gray-100 text-gray-800'}`}>
-        {icons[status]}
-        {labels[status] || status}
+      <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs font-medium ${styles[checkout.cleaning_status] || 'bg-gray-100 text-gray-800'}`}>
+        {icons[checkout.cleaning_status]}
+        {labels[checkout.cleaning_status] || checkout.cleaning_status}
       </span>
     );
   };
@@ -634,13 +647,8 @@ export default function Reservations() {
       .filter(r => r.has_breakfast && r.status === 'checked_in')
       .reduce((sum, r) => sum + (r.adults || 0) + (r.children || 0), 0);
 
-    // Housekeeping (properties with checked_out status today)
-    const checkedOutPropertyIds = new Set(
-      reservations
-        .filter(r => r.status === 'checked_out' && getDatePart(r.check_out_date) === today)
-        .map(r => r.property_id)
-    );
-    const housekeeping = checkedOutPropertyIds.size;
+    // Housekeeping (count from housekeepingReport which only includes checked_out and in_progress)
+    const housekeeping = housekeepingReport.length;
 
     return { checkins, totalGuests, checkouts, stayovers, available, breakfasts, housekeeping };
   };
@@ -868,7 +876,7 @@ export default function Reservations() {
                         )}
                       </td>
                       <td className="px-2 py-3 whitespace-nowrap">
-                        {getCleaningStatusBadge(reservation.cleaning_status)}
+                        {getCleaningStatusBadge(reservation)}
                       </td>
                       <td className="px-3 py-3 whitespace-nowrap text-xs text-gray-600">
                         {reservation.assigned_to_name || '-'}

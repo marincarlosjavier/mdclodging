@@ -17,7 +17,7 @@ export default function CheckoutReport() {
   const [selectedUser, setSelectedUser] = useState(null);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [statusFilters, setStatusFilters] = useState({
-    pending: true,
+    waiting_checkout: true,
     checked_out: true,
     in_progress: true,
     completed: false
@@ -53,7 +53,19 @@ export default function CheckoutReport() {
   const fetchReport = async () => {
     setLoading(true);
     try {
-      const statuses = Object.keys(statusFilters).filter(key => statusFilters[key]).join(',');
+      // Build backend statuses: both waiting_checkout and checked_out map to "pending"
+      const backendStatuses = [];
+      if (statusFilters.waiting_checkout || statusFilters.checked_out) {
+        backendStatuses.push('pending');
+      }
+      if (statusFilters.in_progress) {
+        backendStatuses.push('in_progress');
+      }
+      if (statusFilters.completed) {
+        backendStatuses.push('completed');
+      }
+
+      const statuses = backendStatuses.join(',');
       const response = await api.get(`/reservations/checkout-report?date=${date}&statuses=${statuses}`);
       setReport(response.data);
     } catch (error) {
@@ -218,7 +230,17 @@ export default function CheckoutReport() {
   };
 
   const getStatusBadge = (checkout) => {
-    const { cleaning_status } = checkout;
+    const { cleaning_status, actual_checkout_time } = checkout;
+
+    // If pending and no actual_checkout_time, it's waiting for checkout
+    if (cleaning_status === 'pending' && !actual_checkout_time) {
+      return (
+        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+          <Clock className="w-3 h-3" />
+          Esp. Checkout
+        </span>
+      );
+    }
 
     const styles = {
       pending: 'bg-yellow-100 text-yellow-800',
@@ -338,6 +360,7 @@ export default function CheckoutReport() {
       {/* Summary Card */}
       <div className="bg-white rounded-lg shadow p-6 print:shadow-none">
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+          {/* Total Checkouts */}
           <div className="flex items-center gap-3">
             <div className="p-3 bg-blue-100 rounded-lg">
               <Calendar className="w-6 h-6 text-blue-600" />
@@ -348,6 +371,30 @@ export default function CheckoutReport() {
             </div>
           </div>
 
+          {/* Esperando Checkout */}
+          <div className="flex items-center gap-3">
+            <div className="relative">
+              <div className="p-3 bg-purple-100 rounded-lg">
+                <Clock className="w-6 h-6 text-purple-600" />
+              </div>
+              <label className="absolute -top-1 -right-1 cursor-pointer print:hidden">
+                <input
+                  type="checkbox"
+                  checked={statusFilters.waiting_checkout}
+                  onChange={() => handleStatusFilterChange('waiting_checkout')}
+                  className="w-4 h-4 text-purple-600 rounded focus:ring-2 focus:ring-purple-500"
+                />
+              </label>
+            </div>
+            <div>
+              <p className="text-sm text-gray-600">Esp. Checkout</p>
+              <p className="text-2xl font-bold text-gray-900">
+                {report?.checkouts.filter(c => c.cleaning_status === 'pending' && !c.actual_checkout_time).length || 0}
+              </p>
+            </div>
+          </div>
+
+          {/* Checked Out (antes Pendientes) */}
           <div className="flex items-center gap-3">
             <div className="relative">
               <div className="p-3 bg-yellow-100 rounded-lg">
@@ -356,20 +403,21 @@ export default function CheckoutReport() {
               <label className="absolute -top-1 -right-1 cursor-pointer print:hidden">
                 <input
                   type="checkbox"
-                  checked={statusFilters.pending}
-                  onChange={() => handleStatusFilterChange('pending')}
+                  checked={statusFilters.checked_out}
+                  onChange={() => handleStatusFilterChange('checked_out')}
                   className="w-4 h-4 text-yellow-600 rounded focus:ring-2 focus:ring-yellow-500"
                 />
               </label>
             </div>
             <div>
-              <p className="text-sm text-gray-600">Pendientes</p>
+              <p className="text-sm text-gray-600">Checked Out</p>
               <p className="text-2xl font-bold text-gray-900">
-                {report?.checkouts.filter(c => c.cleaning_status === 'pending').length || 0}
+                {report?.checkouts.filter(c => c.cleaning_status === 'pending' && c.actual_checkout_time).length || 0}
               </p>
             </div>
           </div>
 
+          {/* En Progreso */}
           <div className="flex items-center gap-3">
             <div className="relative">
               <div className="p-3 bg-blue-100 rounded-lg">
@@ -392,28 +440,7 @@ export default function CheckoutReport() {
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            <div className="relative">
-              <div className="p-3 bg-orange-100 rounded-lg">
-                <LogOut className="w-6 h-6 text-orange-600" />
-              </div>
-              <label className="absolute -top-1 -right-1 cursor-pointer print:hidden">
-                <input
-                  type="checkbox"
-                  checked={statusFilters.checked_out}
-                  onChange={() => handleStatusFilterChange('checked_out')}
-                  className="w-4 h-4 text-orange-600 rounded focus:ring-2 focus:ring-orange-500"
-                />
-              </label>
-            </div>
-            <div>
-              <p className="text-sm text-gray-600">Checked Out</p>
-              <p className="text-2xl font-bold text-gray-900">
-                {report?.checkouts.filter(c => c.actual_checkout_time && c.cleaning_status !== 'completed').length || 0}
-              </p>
-            </div>
-          </div>
-
+          {/* Completados */}
           <div className="flex items-center gap-3">
             <div className="relative">
               <div className="p-3 bg-green-100 rounded-lg">
@@ -457,7 +484,27 @@ export default function CheckoutReport() {
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
             {report?.checkouts && report.checkouts.length > 0 ? (
-              report.checkouts.map((checkout) => {
+              report.checkouts
+                .filter((checkout) => {
+                  // Waiting Checkout: pending status without actual checkout time
+                  if (checkout.cleaning_status === 'pending' && !checkout.actual_checkout_time) {
+                    return statusFilters.waiting_checkout;
+                  }
+                  // Checked Out: pending status WITH actual checkout time
+                  if (checkout.cleaning_status === 'pending' && checkout.actual_checkout_time) {
+                    return statusFilters.checked_out;
+                  }
+                  // In Progress
+                  if (checkout.cleaning_status === 'in_progress') {
+                    return statusFilters.in_progress;
+                  }
+                  // Completed
+                  if (checkout.cleaning_status === 'completed') {
+                    return statusFilters.completed;
+                  }
+                  return false;
+                })
+                .map((checkout) => {
                 const totalGuests = checkout.adults + checkout.children + checkout.infants;
                 return (
                   <tr key={checkout.id} className={checkout.actual_checkout_time ? 'bg-yellow-50' : ''}>
