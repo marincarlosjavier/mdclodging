@@ -302,16 +302,8 @@ router.put('/:id/complete', requireRole('admin', 'supervisor'), asyncHandler(asy
 
     const task = result.rows[0];
 
-    // If this is a check_out task, mark the reservation as completed
-    if (task.task_type === 'check_out' && task.reservation_id) {
-      await client.query(
-        `UPDATE reservations
-         SET status = 'completed',
-             updated_at = $1
-         WHERE id = $2 AND tenant_id = $3`,
-        [now, task.reservation_id, req.tenantId]
-      );
-    }
+    // Note: We don't update the reservation status when completing cleaning
+    // The reservation stays as 'checked_out' - only the cleaning_task is marked as completed
 
     await client.query('COMMIT');
     res.json(task);
