@@ -69,8 +69,9 @@ export default function OccupancyCalendar() {
       return null;
     }
 
-    // Both check-in and check-out at 50% of the day (noon)
-    const timeOffset = 0.5;
+    // Check-in at 25% of the day, check-out at 75% of the day
+    const checkInOffset = 0.25;
+    const checkOutOffset = 0.75;
 
     // Calculate start position (days from startDate)
     const visibleCheckIn = checkIn < start ? start : checkIn;
@@ -78,7 +79,7 @@ export default function OccupancyCalendar() {
 
     let startPosition = 0;
     if (visibleCheckIn > start) {
-      startPosition = (visibleCheckIn - start) / (1000 * 60 * 60 * 24) + timeOffset;
+      startPosition = (visibleCheckIn - start) / (1000 * 60 * 60 * 24) + checkInOffset;
     } else if (checkIn < start) {
       // Reservation started before visible range
       startPosition = 0;
@@ -88,7 +89,7 @@ export default function OccupancyCalendar() {
     let endPosition = (visibleCheckOut - start) / (1000 * 60 * 60 * 24);
     if (checkOut <= end) {
       // Add time offset only if checkout is visible
-      endPosition += timeOffset;
+      endPosition += checkOutOffset;
     } else {
       // Extends beyond visible range
       endPosition = daysToShow;
