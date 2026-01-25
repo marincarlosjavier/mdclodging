@@ -78,10 +78,11 @@ export default function OccupancyCalendar() {
     const visibleCheckOut = checkOut > end ? end : checkOut;
 
     let startPosition = 0;
-    if (visibleCheckIn > start) {
+    if (visibleCheckIn >= start && checkIn >= start) {
+      // Check-in is visible, apply offset
       startPosition = (visibleCheckIn - start) / (1000 * 60 * 60 * 24) + checkInOffset;
     } else if (checkIn < start) {
-      // Reservation started before visible range
+      // Reservation started before visible range, start at beginning
       startPosition = 0;
     }
 
