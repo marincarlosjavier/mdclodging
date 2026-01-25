@@ -21,10 +21,11 @@ export default function CheckoutReport() {
   const [housekeepingUsers, setHousekeepingUsers] = useState([]);
   const [selectedUser, setSelectedUser] = useState(null);
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [showCompleted, setShowCompleted] = useState(false);
 
   useEffect(() => {
     fetchReport();
-  }, [date]);
+  }, [date, showCompleted]);
 
   // Update current time every second for elapsed time counter
   useEffect(() => {
@@ -37,7 +38,7 @@ export default function CheckoutReport() {
   const fetchReport = async () => {
     setLoading(true);
     try {
-      const response = await api.get(`/reservations/checkout-report?date=${date}`);
+      const response = await api.get(`/reservations/checkout-report?date=${date}&show_completed=${showCompleted}`);
       setReport(response.data);
     } catch (error) {
       console.error('Error fetching checkout report:', error);
@@ -99,8 +100,8 @@ export default function CheckoutReport() {
 
   const handleStartTask = async (checkout) => {
     try {
-      // Get housekeeping users who are logged in
-      const response = await api.get('/users?role=housekeeping&logged_in=true');
+      // Get users who are logged in via Telegram (uses telegram_roles, not system role)
+      const response = await api.get('/users?logged_in=true');
       const loggedInUsers = response.data;
 
       setSelectedTask(checkout);
@@ -168,6 +169,10 @@ export default function CheckoutReport() {
   };
 
   const handleCompleteTask = async (checkout) => {
+    // Ask for confirmation
+    const confirmed = window.confirm('¿Está seguro que desea marcar esta tarea como completada?');
+    if (!confirmed) return;
+
     try {
       await api.put(`/cleaning-tasks/${checkout.cleaning_task_id}/complete`);
       toast.success('Tarea completada correctamente');
@@ -240,10 +245,9 @@ export default function CheckoutReport() {
   };
 
   const getStatusBadge = (checkout) => {
-    const { cleaning_status, actual_checkout_time } = checkout;
+    const { cleaning_status } = checkout;
 
     const styles = {
-      checked_out: 'bg-orange-100 text-orange-800',
       pending: 'bg-yellow-100 text-yellow-800',
       in_progress: 'bg-blue-100 text-blue-800',
       completed: 'bg-green-100 text-green-800',
@@ -251,7 +255,6 @@ export default function CheckoutReport() {
     };
 
     const icons = {
-      checked_out: <LogOut className="w-4 h-4" />,
       pending: <AlertCircle className="w-4 h-4" />,
       in_progress: <Loader className="w-4 h-4" />,
       completed: <CheckCircle className="w-4 h-4" />,
@@ -259,22 +262,11 @@ export default function CheckoutReport() {
     };
 
     const labels = {
-      checked_out: 'Checked Out',
       pending: 'Pendiente',
       in_progress: 'En Progreso',
       completed: 'Completado',
       cancelled: 'Cancelado'
     };
-
-    // If checkout has been reported, show "Checked Out" status
-    if (actual_checkout_time) {
-      return (
-        <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${styles.checked_out}`}>
-          {icons.checked_out}
-          {labels.checked_out}
-        </span>
-      );
-    }
 
     if (!cleaning_status) {
       return (
@@ -295,12 +287,19 @@ export default function CheckoutReport() {
 
   const formatTime = (timeString) => {
     if (!timeString) return '-';
+
+    console.log('[DEBUG formatTime] Input:', timeString);
+
     // If it's just a time (HH:MM or HH:MM:SS), extract HH:MM
     if (/^\d{2}:\d{2}(:\d{2})?$/.test(timeString)) {
+      console.log('[DEBUG formatTime] Simple time format, returning:', timeString.substring(0, 5));
       return timeString.substring(0, 5); // Return HH:MM
     }
+
     // Otherwise, format as Colombia time
-    return formatColombiaTime(timeString, { hour: '2-digit', minute: '2-digit' });
+    const result = formatColombiaTime(timeString, { hour: '2-digit', minute: '2-digit' });
+    console.log('[DEBUG formatTime] Colombia time result:', result);
+    return result;
   };
 
   const handlePrint = () => {
@@ -330,6 +329,17 @@ export default function CheckoutReport() {
             onChange={(e) => setDate(e.target.value)}
             className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
           />
+          <button
+            onClick={() => setShowCompleted(!showCompleted)}
+            className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-colors ${
+              showCompleted
+                ? 'bg-green-600 text-white hover:bg-green-700'
+                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+            }`}
+          >
+            <CheckCircle className="w-5 h-5" />
+            {showCompleted ? 'Ocultar' : 'Mostrar'} Completadas
+          </button>
           <button
             onClick={handlePrint}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
@@ -472,13 +482,26 @@ export default function CheckoutReport() {
                       })()}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-center print:hidden">
-                      {checkout.reservation_status === 'active' && (
+                      {checkout.reservation_status === 'active' && !checkout.completed_at && (
                         <div className="flex items-center justify-center gap-2">
-                          {/* Report/Edit Checkout Button */}
+                          {/* Report/Edit Checkout Button - disabled when task has started */}
                           <button
                             onClick={() => handleReportCheckout(checkout)}
-                            className={`p-2 rounded-lg transition-colors ${checkout.actual_checkout_time ? 'bg-orange-100 text-orange-700 hover:bg-orange-200' : 'bg-green-100 text-green-700 hover:bg-green-200'}`}
-                            title={checkout.actual_checkout_time ? "Corregir Checkout" : "Reportar Checkout"}
+                            disabled={checkout.started_at !== null}
+                            className={`p-2 rounded-lg transition-colors ${
+                              checkout.started_at
+                                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                : checkout.actual_checkout_time
+                                  ? 'bg-orange-100 text-orange-700 hover:bg-orange-200'
+                                  : 'bg-green-100 text-green-700 hover:bg-green-200'
+                            }`}
+                            title={
+                              checkout.started_at
+                                ? "No se puede corregir - tarea iniciada"
+                                : checkout.actual_checkout_time
+                                  ? "Corregir Checkout"
+                                  : "Reportar Checkout"
+                            }
                           >
                             {checkout.actual_checkout_time ? <Edit className="w-4 h-4" /> : <LogOut className="w-4 h-4" />}
                           </button>

@@ -134,11 +134,14 @@ router.get('/checkin-report', asyncHandler(async (req, res) => {
   });
 }));
 
-// GET /api/reservations/checkout-report - Get daily checkout report
+// GET /api/reservations/checkout-report - Get checkout report
 router.get('/checkout-report', asyncHandler(async (req, res) => {
-  const { date } = req.query;
+  const { date, show_completed } = req.query;
   const targetDate = date || new Date().toISOString().split('T')[0];
 
+  // Build query to show:
+  // 1. All pending/in_progress tasks (regardless of date)
+  // 2. Completed tasks only for the selected date (if show_completed=true)
   const result = await pool.query(
     `SELECT
       r.id,
@@ -165,9 +168,19 @@ router.get('/checkout-report', asyncHandler(async (req, res) => {
      LEFT JOIN cleaning_tasks ct ON ct.reservation_id = r.id AND ct.task_type = 'check_out'
      LEFT JOIN users u ON u.id = ct.assigned_to
      WHERE r.tenant_id = $1
-       AND r.check_out_date = $2
        AND r.status = 'active'
-     ORDER BY COALESCE(r.checkout_time, '12:00'), r.actual_checkout_time, p.name`,
+       AND ct.id IS NOT NULL
+       AND (
+         -- Show all non-completed tasks
+         ct.status IN ('pending', 'in_progress')
+         ${show_completed === 'true' ? `OR (ct.status = 'completed' AND r.check_out_date = $2)` : ''}
+       )
+     ORDER BY
+       CASE WHEN ct.status = 'completed' THEN 1 ELSE 0 END,
+       r.check_out_date,
+       COALESCE(r.checkout_time, '12:00'),
+       r.actual_checkout_time,
+       p.name`,
     [req.tenantId, targetDate]
   );
 
@@ -357,31 +370,103 @@ router.put('/:id', requireRole('admin', 'supervisor'), asyncHandler(async (req, 
 
     const currentReservation = currentResult.rows[0];
     const isCheckoutReported = actual_checkout_time && !currentReservation.actual_checkout_time;
+    const isCheckoutCancelled = actual_checkout_time === null && currentReservation.actual_checkout_time;
 
     // Convert actual_checkout_time to Date object if it's a string
     const actualCheckoutTimeValue = actual_checkout_time ? new Date(actual_checkout_time) : null;
 
-    // Update reservation
+    // Build update query dynamically to allow setting NULL
+    const updates = [];
+    const params = [];
+    let paramCount = 0;
+
+    if (property_id !== undefined) {
+      paramCount++;
+      updates.push(`property_id = $${paramCount}`);
+      params.push(property_id);
+    }
+    if (check_in_date !== undefined) {
+      paramCount++;
+      updates.push(`check_in_date = $${paramCount}`);
+      params.push(check_in_date);
+    }
+    if (check_out_date !== undefined) {
+      paramCount++;
+      updates.push(`check_out_date = $${paramCount}`);
+      params.push(check_out_date);
+    }
+    if (checkin_time !== undefined) {
+      paramCount++;
+      updates.push(`checkin_time = $${paramCount}`);
+      params.push(checkin_time);
+    }
+    if (checkout_time !== undefined) {
+      paramCount++;
+      updates.push(`checkout_time = $${paramCount}`);
+      params.push(checkout_time);
+    }
+    if (actual_checkout_time !== undefined) {
+      paramCount++;
+      updates.push(`actual_checkout_time = $${paramCount}`);
+      params.push(actualCheckoutTimeValue);
+    }
+    if (adults !== undefined) {
+      paramCount++;
+      updates.push(`adults = $${paramCount}`);
+      params.push(adults);
+    }
+    if (children !== undefined) {
+      paramCount++;
+      updates.push(`children = $${paramCount}`);
+      params.push(children);
+    }
+    if (infants !== undefined) {
+      paramCount++;
+      updates.push(`infants = $${paramCount}`);
+      params.push(infants);
+    }
+    if (has_breakfast !== undefined) {
+      paramCount++;
+      updates.push(`has_breakfast = $${paramCount}`);
+      params.push(has_breakfast);
+    }
+    if (reference !== undefined) {
+      paramCount++;
+      updates.push(`reference = $${paramCount}`);
+      params.push(reference);
+    }
+    if (additional_requirements !== undefined) {
+      paramCount++;
+      updates.push(`additional_requirements = $${paramCount}`);
+      params.push(additional_requirements);
+    }
+    if (notes !== undefined) {
+      paramCount++;
+      updates.push(`notes = $${paramCount}`);
+      params.push(notes);
+    }
+    if (status !== undefined) {
+      paramCount++;
+      updates.push(`status = $${paramCount}`);
+      params.push(status);
+    }
+
+    updates.push('updated_at = CURRENT_TIMESTAMP');
+
+    paramCount++;
+    params.push(id);
+    const idParam = paramCount;
+
+    paramCount++;
+    params.push(req.tenantId);
+    const tenantParam = paramCount;
+
     const result = await client.query(
       `UPDATE reservations
-       SET property_id = COALESCE($1, property_id),
-           check_in_date = COALESCE($2, check_in_date),
-           check_out_date = COALESCE($3, check_out_date),
-           checkin_time = COALESCE($4, checkin_time),
-           checkout_time = COALESCE($5, checkout_time),
-           actual_checkout_time = COALESCE($6, actual_checkout_time),
-           adults = COALESCE($7, adults),
-           children = COALESCE($8, children),
-           infants = COALESCE($9, infants),
-           has_breakfast = COALESCE($10, has_breakfast),
-           reference = COALESCE($11, reference),
-           additional_requirements = COALESCE($12, additional_requirements),
-           notes = COALESCE($13, notes),
-           status = COALESCE($14, status),
-           updated_at = CURRENT_TIMESTAMP
-       WHERE id = $15 AND tenant_id = $16
+       SET ${updates.join(', ')}
+       WHERE id = $${idParam} AND tenant_id = $${tenantParam}
        RETURNING *`,
-      [property_id, check_in_date, check_out_date, checkin_time, checkout_time, actualCheckoutTimeValue, adults, children, infants, has_breakfast, reference, additional_requirements, notes, status, id, req.tenantId]
+      params
     );
 
     const updatedReservation = result.rows[0];
@@ -426,6 +511,21 @@ router.put('/:id', requireRole('admin', 'supervisor'), asyncHandler(async (req, 
         infants: updatedReservation.infants,
         is_priority: is_priority || false
       });
+    }
+
+    // If checkout was cancelled, reset cleaning task
+    if (isCheckoutCancelled) {
+      await client.query(
+        `UPDATE cleaning_tasks
+         SET status = 'pending',
+             assigned_to = NULL,
+             assigned_at = NULL,
+             started_at = NULL,
+             checkout_reported_at = NULL,
+             updated_at = NOW()
+         WHERE reservation_id = $1 AND task_type = 'check_out'`,
+        [id]
+      );
     }
 
     await client.query('COMMIT');

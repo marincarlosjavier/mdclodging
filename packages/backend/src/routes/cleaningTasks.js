@@ -169,7 +169,7 @@ router.put('/:id', asyncHandler(async (req, res) => {
          assigned_to = COALESCE($2, assigned_to),
          status = COALESCE($3, status),
          notes = COALESCE($4, notes),
-         updated_at = CURRENT_TIMESTAMP
+         updated_at = CURRENT_TIMESTAMP AT TIME ZONE 'UTC'
      WHERE id = $5 AND tenant_id = $6
      RETURNING *`,
     [scheduled_date, assigned_to, status, notes, id, req.tenantId]
@@ -190,10 +190,10 @@ router.patch('/:id/complete', asyncHandler(async (req, res) => {
   const result = await pool.query(
     `UPDATE cleaning_tasks
      SET status = 'completed',
-         completed_at = CURRENT_TIMESTAMP,
+         completed_at = CURRENT_TIMESTAMP AT TIME ZONE 'UTC',
          completed_by = $1,
          notes = COALESCE($2, notes),
-         updated_at = CURRENT_TIMESTAMP
+         updated_at = CURRENT_TIMESTAMP AT TIME ZONE 'UTC'
      WHERE id = $3 AND tenant_id = $4
      RETURNING *`,
     [req.user.id, notes, id, req.tenantId]
@@ -214,8 +214,8 @@ router.patch('/:id/start', asyncHandler(async (req, res) => {
     `UPDATE cleaning_tasks
      SET status = 'in_progress',
          assigned_to = COALESCE(assigned_to, $1),
-         assigned_at = COALESCE(assigned_at, NOW()),
-         updated_at = CURRENT_TIMESTAMP
+         assigned_at = COALESCE(assigned_at, CURRENT_TIMESTAMP AT TIME ZONE 'UTC'),
+         updated_at = CURRENT_TIMESTAMP AT TIME ZONE 'UTC' AT TIME ZONE 'UTC'
      WHERE id = $2 AND tenant_id = $3
      RETURNING *`,
     [req.user.id, id, req.tenantId]
@@ -252,16 +252,19 @@ router.put('/:id/start', requireRole('admin', 'supervisor'), asyncHandler(async 
   const { id } = req.params;
   const { assigned_to } = req.body;
 
+  const now = new Date();
+  const assignedAt = assigned_to ? now : null;
+
   const result = await pool.query(
     `UPDATE cleaning_tasks
      SET status = 'in_progress',
-         assigned_to = $1,
-         assigned_at = CASE WHEN $1 IS NOT NULL THEN NOW() ELSE NULL END,
-         started_at = NOW(),
-         updated_at = NOW()
-     WHERE id = $2 AND tenant_id = $3
+         assigned_to = $1::INTEGER,
+         assigned_at = $2,
+         started_at = $3,
+         updated_at = $4
+     WHERE id = $5 AND tenant_id = $6
      RETURNING *`,
-    [assigned_to || null, id, req.tenantId]
+    [assigned_to || null, assignedAt, now, now, id, req.tenantId]
   );
 
   if (result.rows.length === 0) {
@@ -275,22 +278,49 @@ router.put('/:id/start', requireRole('admin', 'supervisor'), asyncHandler(async 
 router.put('/:id/complete', requireRole('admin', 'supervisor'), asyncHandler(async (req, res) => {
   const { id } = req.params;
 
-  const result = await pool.query(
-    `UPDATE cleaning_tasks
-     SET status = 'completed',
-         completed_at = NOW(),
-         completed_by = $1,
-         updated_at = NOW()
-     WHERE id = $2 AND tenant_id = $3
-     RETURNING *`,
-    [req.userId, id, req.tenantId]
-  );
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
 
-  if (result.rows.length === 0) {
-    return res.status(404).json({ error: 'Cleaning task not found' });
+    const now = new Date();
+
+    const result = await client.query(
+      `UPDATE cleaning_tasks
+       SET status = 'completed',
+           completed_at = $1,
+           completed_by = $2,
+           updated_at = $3
+       WHERE id = $4 AND tenant_id = $5
+       RETURNING *`,
+      [now, req.userId, now, id, req.tenantId]
+    );
+
+    if (result.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Cleaning task not found' });
+    }
+
+    const task = result.rows[0];
+
+    // If this is a check_out task, mark the reservation as completed
+    if (task.task_type === 'check_out' && task.reservation_id) {
+      await client.query(
+        `UPDATE reservations
+         SET status = 'completed',
+             updated_at = $1
+         WHERE id = $2 AND tenant_id = $3`,
+        [now, task.reservation_id, req.tenantId]
+      );
+    }
+
+    await client.query('COMMIT');
+    res.json(task);
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
   }
-
-  res.json(result.rows[0]);
 }));
 
 export default router;

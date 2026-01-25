@@ -23,7 +23,7 @@ router.get('/', requireSupervisor, asyncHandler(async (req, res) => {
 
   if (role) {
     paramCount++;
-    query += ` AND role = $${paramCount}`;
+    query += ` AND $${paramCount} = ANY(role)`;
     params.push(role);
   }
 
@@ -33,18 +33,25 @@ router.get('/', requireSupervisor, asyncHandler(async (req, res) => {
     params.push(is_active === 'true');
   }
 
-  // Filter by logged in users (based on telegram_session_state)
+  // Filter by logged in users (based on telegram is_logged_in)
   if (logged_in === 'true') {
     query += ` AND EXISTS (
       SELECT 1 FROM telegram_contacts tc
       WHERE tc.user_id = users.id
-      AND tc.session_state = 'authenticated'
+      AND tc.is_logged_in = true
     )`;
   }
 
   query += ' ORDER BY created_at DESC';
 
+  console.log('[DEBUG users.js] Query:', query);
+  console.log('[DEBUG users.js] Params:', params);
+
   const result = await pool.query(query, params);
+
+  console.log('[DEBUG users.js] Found users:', result.rows.length);
+  console.log('[DEBUG users.js] Users:', result.rows.map(u => ({ id: u.id, full_name: u.full_name, role: u.role })));
+
   res.json(result.rows);
 }));
 

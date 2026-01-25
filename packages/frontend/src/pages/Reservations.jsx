@@ -91,8 +91,8 @@ export default function Reservations() {
 
       // Check if property has overlapping reservations
       const hasOverlap = reservations.some(r => {
-        // Skip cancelled reservations and the current reservation being edited
-        if (r.status === 'cancelled') return false;
+        // Skip non-active reservations (cancelled and completed) and the current reservation being edited
+        if (r.status !== 'active') return false;
         if (editingReservation && r.id === editingReservation.id) return false;
         if (r.property_id !== p.id) return false;
 
