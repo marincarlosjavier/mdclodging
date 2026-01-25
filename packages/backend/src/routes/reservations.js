@@ -164,8 +164,9 @@ router.get('/checkout-report', asyncHandler(async (req, res) => {
   const statusList = statuses ? statuses.split(',') : ['pending', 'checked_out', 'in_progress'];
 
   // Build conditions based on selected statuses
-  const conditions = [];
-  const params = [req.tenantId];
+  const params = [req.tenantId, targetDate];
+  const tenantIdParam = 1;
+  const dateFilterParam = 2;
 
   // Map frontend statuses to backend conditions
   const taskConditions = [];
@@ -177,14 +178,11 @@ router.get('/checkout-report', asyncHandler(async (req, res) => {
     taskConditions.push(`ct.status = 'in_progress'`);
   }
   if (statusList.includes('completed')) {
-    params.push(targetDate);
     // Show completed tasks based on when they were completed, not checkout date
-    taskConditions.push(`(ct.status = 'completed' AND DATE(ct.completed_at AT TIME ZONE 'America/Bogota') = $${params.length})`);
+    taskConditions.push(`(ct.status = 'completed' AND DATE(ct.completed_at AT TIME ZONE 'America/Bogota') = $${dateFilterParam})`);
   }
 
   // Build WHERE clause
-  params.push(targetDate);
-  const dateFilterParam = params.length;
 
   let whereClause = `r.tenant_id = $1 AND r.status IN ('active', 'checked_in', 'checked_out')`;
 
