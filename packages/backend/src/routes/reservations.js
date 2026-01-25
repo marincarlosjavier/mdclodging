@@ -435,8 +435,24 @@ router.put('/:id', requireRole('admin', 'supervisor'), asyncHandler(async (req, 
     }
 
     const currentReservation = currentResult.rows[0];
-    const isCheckoutReported = actual_checkout_time && !currentReservation.actual_checkout_time;
-    const isCheckoutCancelled = actual_checkout_time === null && currentReservation.actual_checkout_time;
+
+    // If status is being changed to 'checked_out' but no actual_checkout_time is provided,
+    // automatically set it to current Colombia time
+    let finalActualCheckoutTime = actual_checkout_time;
+    if (status === 'checked_out' &&
+        actual_checkout_time === undefined &&
+        !currentReservation.actual_checkout_time) {
+      // Get current time in Colombia timezone (HH:MM:SS format)
+      const now = new Date();
+      const colombiaTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/Bogota' }));
+      const hours = String(colombiaTime.getHours()).padStart(2, '0');
+      const minutes = String(colombiaTime.getMinutes()).padStart(2, '0');
+      const seconds = String(colombiaTime.getSeconds()).padStart(2, '0');
+      finalActualCheckoutTime = `${hours}:${minutes}:${seconds}`;
+    }
+
+    const isCheckoutReported = finalActualCheckoutTime && !currentReservation.actual_checkout_time;
+    const isCheckoutCancelled = finalActualCheckoutTime === null && currentReservation.actual_checkout_time;
 
     // Build update query dynamically to allow setting NULL
     const updates = [];
@@ -473,10 +489,10 @@ router.put('/:id', requireRole('admin', 'supervisor'), asyncHandler(async (req, 
       updates.push(`actual_checkin_time = $${paramCount}`);
       params.push(actual_checkin_time);
     }
-    if (actual_checkout_time !== undefined) {
+    if (finalActualCheckoutTime !== undefined) {
       paramCount++;
       updates.push(`actual_checkout_time = $${paramCount}`);
-      params.push(actual_checkout_time);
+      params.push(finalActualCheckoutTime);
     }
     if (adults !== undefined) {
       paramCount++;
