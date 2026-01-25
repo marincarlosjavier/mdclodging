@@ -51,12 +51,16 @@ export default function CheckoutReport() {
   }, []);
 
   const fetchReport = async () => {
+    console.log('[fetchReport] Called with filters:', statusFilters);
     setLoading(true);
     try {
-      // Build backend statuses: both waiting_checkout and checked_out map to "pending"
+      // Map frontend filters to backend statuses
       const backendStatuses = [];
-      if (statusFilters.waiting_checkout || statusFilters.checked_out) {
-        backendStatuses.push('pending');
+      if (statusFilters.waiting_checkout) {
+        backendStatuses.push('pending'); // Backend: pending without actual_checkout_time
+      }
+      if (statusFilters.checked_out) {
+        backendStatuses.push('checked_out'); // Backend: pending with actual_checkout_time
       }
       if (statusFilters.in_progress) {
         backendStatuses.push('in_progress');
@@ -65,8 +69,20 @@ export default function CheckoutReport() {
         backendStatuses.push('completed');
       }
 
+      console.log('[fetchReport] Backend statuses:', backendStatuses);
+
+      // If no statuses selected, fetch nothing
+      if (backendStatuses.length === 0) {
+        console.log('[fetchReport] No statuses selected, clearing report');
+        setReport({ date, total_checkouts: 0, checkouts: [] });
+        setLoading(false);
+        return;
+      }
+
       const statuses = backendStatuses.join(',');
+      console.log('[fetchReport] Fetching:', `/reservations/checkout-report?date=${date}&statuses=${statuses}`);
       const response = await api.get(`/reservations/checkout-report?date=${date}&statuses=${statuses}`);
+      console.log('[fetchReport] Received', response.data.checkouts.length, 'checkouts');
       setReport(response.data);
     } catch (error) {
       console.error('Error fetching checkout report:', error);
@@ -76,10 +92,15 @@ export default function CheckoutReport() {
   };
 
   const handleStatusFilterChange = (status) => {
-    setStatusFilters(prev => ({
-      ...prev,
-      [status]: !prev[status]
-    }));
+    console.log('[Checkbox Click]', status, 'current:', statusFilters[status], 'will become:', !statusFilters[status]);
+    setStatusFilters(prev => {
+      const newFilters = {
+        ...prev,
+        [status]: !prev[status]
+      };
+      console.log('[New Filters]', newFilters);
+      return newFilters;
+    });
   };
 
   const handleStartTask = async (checkout) => {
@@ -484,27 +505,7 @@ export default function CheckoutReport() {
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
             {report?.checkouts && report.checkouts.length > 0 ? (
-              report.checkouts
-                .filter((checkout) => {
-                  // Waiting Checkout: pending status without actual checkout time
-                  if (checkout.cleaning_status === 'pending' && !checkout.actual_checkout_time) {
-                    return statusFilters.waiting_checkout;
-                  }
-                  // Checked Out: pending status WITH actual checkout time
-                  if (checkout.cleaning_status === 'pending' && checkout.actual_checkout_time) {
-                    return statusFilters.checked_out;
-                  }
-                  // In Progress
-                  if (checkout.cleaning_status === 'in_progress') {
-                    return statusFilters.in_progress;
-                  }
-                  // Completed
-                  if (checkout.cleaning_status === 'completed') {
-                    return statusFilters.completed;
-                  }
-                  return false;
-                })
-                .map((checkout) => {
+              report.checkouts.map((checkout) => {
                 const totalGuests = checkout.adults + checkout.children + checkout.infants;
                 return (
                   <tr key={checkout.id} className={checkout.actual_checkout_time ? 'bg-yellow-50' : ''}>
