@@ -451,6 +451,15 @@ router.put('/:id', requireRole('admin', 'supervisor'), asyncHandler(async (req, 
       finalActualCheckoutTime = `${hours}:${minutes}:${seconds}`;
     }
 
+    // If status is being changed FROM 'checked_out' to something else (like 'checked_in'),
+    // automatically clear the actual_checkout_time
+    if (status !== undefined &&
+        status !== 'checked_out' &&
+        currentReservation.status === 'checked_out' &&
+        actual_checkout_time === undefined) {
+      finalActualCheckoutTime = null;
+    }
+
     const isCheckoutReported = finalActualCheckoutTime && !currentReservation.actual_checkout_time;
     const isCheckoutCancelled = finalActualCheckoutTime === null && currentReservation.actual_checkout_time;
 
@@ -597,19 +606,39 @@ router.put('/:id', requireRole('admin', 'supervisor'), asyncHandler(async (req, 
       });
     }
 
-    // If checkout was cancelled, reset cleaning task
+    // If checkout was cancelled, delete the checkout cleaning task if not started
+    // or reset it if already in progress
     if (isCheckoutCancelled) {
-      await client.query(
-        `UPDATE cleaning_tasks
-         SET status = 'pending',
-             assigned_to = NULL,
-             assigned_at = NULL,
-             started_at = NULL,
-             checkout_reported_at = NULL,
-             updated_at = NOW()
+      const taskResult = await client.query(
+        `SELECT id, status, started_at FROM cleaning_tasks
          WHERE reservation_id = $1 AND task_type = 'check_out'`,
         [id]
       );
+
+      if (taskResult.rows.length > 0) {
+        const task = taskResult.rows[0];
+
+        // If task hasn't been started yet, delete it completely
+        if (!task.started_at && task.status === 'pending') {
+          await client.query(
+            `DELETE FROM cleaning_tasks WHERE id = $1`,
+            [task.id]
+          );
+        } else {
+          // If task is in progress or has been started, reset it to pending
+          await client.query(
+            `UPDATE cleaning_tasks
+             SET status = 'pending',
+                 assigned_to = NULL,
+                 assigned_at = NULL,
+                 started_at = NULL,
+                 checkout_reported_at = NULL,
+                 updated_at = NOW()
+             WHERE id = $1`,
+            [task.id]
+          );
+        }
+      }
     }
 
     await client.query('COMMIT');
