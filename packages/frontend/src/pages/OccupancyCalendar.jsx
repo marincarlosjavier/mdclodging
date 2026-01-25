@@ -69,9 +69,9 @@ export default function OccupancyCalendar() {
       return null;
     }
 
-    // Check-in at 24% of the day, check-out at 74% of the day
-    const checkInOffset = 0.24;
-    const checkOutOffset = 0.74;
+    // Check-in starts at 74% of check-in day, ends at 27% of check-out day
+    const checkInOffset = 0.74;
+    const checkOutOffset = 0.27;
 
     // Calculate start position (days from startDate)
     const visibleCheckIn = checkIn < start ? start : checkIn;
