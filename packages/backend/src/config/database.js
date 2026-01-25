@@ -14,7 +14,7 @@ const config = {
   password: process.env.DB_PASSWORD || 'password',
   max: 20,
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
+  connectionTimeoutMillis: 10000,
 };
 
 // Support for DATABASE_URL (Heroku/Railway style)

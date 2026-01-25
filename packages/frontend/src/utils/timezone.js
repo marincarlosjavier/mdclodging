@@ -46,7 +46,7 @@ export function createColombiaDateTime(dateStr, timeStr) {
  * @param {object} options - Intl.DateTimeFormat options
  * @returns {string} Formatted date/time string
  */
-export function formatColombiaTime(dateString, options = { hour: '2-digit', minute: '2-digit' }) {
+export function formatColombiaTime(dateString, options = { hour: '2-digit', minute: '2-digit', hour12: false }) {
   if (!dateString) return '-';
   const date = new Date(dateString);
   return date.toLocaleTimeString('es-CO', { ...options, timeZone: COLOMBIA_TZ });

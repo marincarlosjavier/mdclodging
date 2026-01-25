@@ -11,21 +11,36 @@ export default function CheckoutReport() {
   const [date, setDate] = useState(getTodayInColombia());
   const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [showCheckoutModal, setShowCheckoutModal] = useState(false);
-  const [selectedCheckout, setSelectedCheckout] = useState(null);
-  const [checkoutType, setCheckoutType] = useState('now'); // 'now' or 'scheduled'
-  const [scheduledTime, setScheduledTime] = useState('');
-  const [isPriority, setIsPriority] = useState(false);
   const [showStartTaskModal, setShowStartTaskModal] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
   const [housekeepingUsers, setHousekeepingUsers] = useState([]);
   const [selectedUser, setSelectedUser] = useState(null);
   const [currentTime, setCurrentTime] = useState(new Date());
-  const [showCompleted, setShowCompleted] = useState(false);
+  const [statusFilters, setStatusFilters] = useState({
+    pending: true,
+    checked_out: true,
+    in_progress: true,
+    completed: false
+  });
+  const [showCompleteTaskModal, setShowCompleteTaskModal] = useState(false);
+  const [taskToComplete, setTaskToComplete] = useState(null);
+  const [timezone, setTimezone] = useState('America/Bogota');
 
   useEffect(() => {
+    fetchTenantSettings();
     fetchReport();
-  }, [date, showCompleted]);
+  }, [date, statusFilters]);
+
+  const fetchTenantSettings = async () => {
+    try {
+      const response = await api.get('/tenants/settings');
+      if (response.data.timezone) {
+        setTimezone(response.data.timezone);
+      }
+    } catch (error) {
+      console.error('Error fetching tenant settings:', error);
+    }
+  };
 
   // Update current time every second for elapsed time counter
   useEffect(() => {
@@ -38,7 +53,8 @@ export default function CheckoutReport() {
   const fetchReport = async () => {
     setLoading(true);
     try {
-      const response = await api.get(`/reservations/checkout-report?date=${date}&show_completed=${showCompleted}`);
+      const statuses = Object.keys(statusFilters).filter(key => statusFilters[key]).join(',');
+      const response = await api.get(`/reservations/checkout-report?date=${date}&statuses=${statuses}`);
       setReport(response.data);
     } catch (error) {
       console.error('Error fetching checkout report:', error);
@@ -47,80 +63,43 @@ export default function CheckoutReport() {
     }
   };
 
-  const handleReportCheckout = (checkout) => {
-    setSelectedCheckout(checkout);
-    setCheckoutType('now');
-    setScheduledTime('');
-    setIsPriority(false);
-    setShowCheckoutModal(true);
-  };
-
-  const handleConfirmCheckout = async () => {
-    try {
-      let actualCheckoutTime;
-
-      if (checkoutType === 'now') {
-        // Get current time in Colombia and convert to ISO
-        actualCheckoutTime = createColombiaDateTime(
-          getTodayInColombia(),
-          new Date().toLocaleTimeString('en-US', {
-            timeZone: 'America/Bogota',
-            hour12: false,
-            hour: '2-digit',
-            minute: '2-digit'
-          })
-        );
-      } else {
-        // Use the selected date and time in Colombia timezone
-        actualCheckoutTime = createColombiaDateTime(date, scheduledTime);
-      }
-
-      await dispatch(updateReservation({
-        id: selectedCheckout.id,
-        data: {
-          actual_checkout_time: actualCheckoutTime,
-          is_priority: isPriority
-        }
-      })).unwrap();
-
-      const timeStr = checkoutType === 'now' ? 'inmediato' : `a las ${scheduledTime}`;
-      const priorityMsg = isPriority ? ' [PRIORIDAD]' : '';
-      toast.success(`Checkout reportado correctamente ${timeStr}${priorityMsg}. Notificación enviada a housekeeping.`);
-
-      setShowCheckoutModal(false);
-      setSelectedCheckout(null);
-      setCheckoutType('now');
-      setScheduledTime('');
-      setIsPriority(false);
-      fetchReport();
-    } catch (error) {
-      // Error already handled by interceptor
-    }
+  const handleStatusFilterChange = (status) => {
+    setStatusFilters(prev => ({
+      ...prev,
+      [status]: !prev[status]
+    }));
   };
 
   const handleStartTask = async (checkout) => {
     try {
       // Get users who are logged in via Telegram (uses telegram_roles, not system role)
+      console.log('[DEBUG] Fetching logged in users...');
       const response = await api.get('/users?logged_in=true');
       const loggedInUsers = response.data;
+      console.log('[DEBUG] Logged in users response:', loggedInUsers);
+      console.log('[DEBUG] Number of users:', loggedInUsers.length);
 
       setSelectedTask(checkout);
       setHousekeepingUsers(loggedInUsers);
 
       if (loggedInUsers.length === 0) {
         // No users logged in - show warning modal
+        console.log('[DEBUG] No users logged in, showing warning modal');
         setSelectedUser(null);
         setShowStartTaskModal(true);
       } else if (loggedInUsers.length === 1) {
         // Only one user - assign automatically
+        console.log('[DEBUG] One user found, auto-assigning to:', loggedInUsers[0].full_name);
         await startTaskWithUser(checkout.cleaning_task_id, loggedInUsers[0].id);
       } else {
         // Multiple users - show selection modal
+        console.log('[DEBUG] Multiple users found, showing selection modal');
         setSelectedUser(null);
         setShowStartTaskModal(true);
       }
     } catch (error) {
       console.error('Error fetching housekeeping users:', error);
+      console.error('Error details:', error.response?.data);
       toast.error('Error al obtener usuarios de housekeeping');
     }
   };
@@ -150,32 +129,19 @@ export default function CheckoutReport() {
     }
   };
 
-  const handleCancelCheckout = async () => {
-    try {
-      await dispatch(updateReservation({
-        id: selectedCheckout.id,
-        data: {
-          actual_checkout_time: null
-        }
-      })).unwrap();
-
-      toast.success('Checkout cancelado correctamente');
-      setShowCheckoutModal(false);
-      setSelectedCheckout(null);
-      fetchReport();
-    } catch (error) {
-      toast.error('Error al cancelar checkout');
-    }
+  const handleCompleteTask = (checkout) => {
+    setTaskToComplete(checkout);
+    setShowCompleteTaskModal(true);
   };
 
-  const handleCompleteTask = async (checkout) => {
-    // Ask for confirmation
-    const confirmed = window.confirm('¿Está seguro que desea marcar esta tarea como completada?');
-    if (!confirmed) return;
+  const confirmCompleteTask = async () => {
+    if (!taskToComplete) return;
 
     try {
-      await api.put(`/cleaning-tasks/${checkout.cleaning_task_id}/complete`);
+      await api.put(`/cleaning-tasks/${taskToComplete.cleaning_task_id}/complete`);
       toast.success('Tarea completada correctamente');
+      setShowCompleteTaskModal(false);
+      setTaskToComplete(null);
       fetchReport();
     } catch (error) {
       console.error('Error completing task:', error);
@@ -184,7 +150,7 @@ export default function CheckoutReport() {
   };
 
   const calculateElapsedTime = (checkout) => {
-    const { actual_checkout_time, started_at, completed_at } = checkout;
+    const { actual_checkout_time, check_out_date, started_at, completed_at } = checkout;
 
     // No checkout reported yet
     if (!actual_checkout_time) {
@@ -193,8 +159,15 @@ export default function CheckoutReport() {
 
     // Checkout reported, waiting to start
     if (actual_checkout_time && !started_at) {
-      const checkoutTime = new Date(actual_checkout_time);
-      const elapsed = Math.floor((currentTime - checkoutTime) / 1000);
+      // Extract date in Colombia timezone and combine with time
+      const colombiaDate = new Date(check_out_date).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
+      const checkoutDateTime = new Date(`${colombiaDate}T${actual_checkout_time}`);
+      const elapsed = Math.floor((currentTime - checkoutDateTime) / 1000);
+
+      // If elapsed is negative, checkout is in the future
+      if (elapsed < 0) {
+        return { time: '-', color: 'text-gray-400', label: '' };
+      }
 
       const hours = Math.floor(elapsed / 3600);
       const minutes = Math.floor((elapsed % 3600) / 60);
@@ -255,30 +228,30 @@ export default function CheckoutReport() {
     };
 
     const icons = {
-      pending: <AlertCircle className="w-4 h-4" />,
-      in_progress: <Loader className="w-4 h-4" />,
-      completed: <CheckCircle className="w-4 h-4" />,
-      cancelled: <XCircle className="w-4 h-4" />
+      pending: <AlertCircle className="w-3 h-3" />,
+      in_progress: <Loader className="w-3 h-3" />,
+      completed: <CheckCircle className="w-3 h-3" />,
+      cancelled: <XCircle className="w-3 h-3" />
     };
 
     const labels = {
-      pending: 'Pendiente',
-      in_progress: 'En Progreso',
-      completed: 'Completado',
-      cancelled: 'Cancelado'
+      pending: 'Pend.',
+      in_progress: 'Progreso',
+      completed: 'Listo',
+      cancelled: 'Cancel.'
     };
 
     if (!cleaning_status) {
       return (
-        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-          <AlertCircle className="w-4 h-4" />
-          Sin Asignar
+        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+          <AlertCircle className="w-3 h-3" />
+          Sin Asig.
         </span>
       );
     }
 
     return (
-      <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${styles[cleaning_status]}`}>
+      <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs font-medium ${styles[cleaning_status]}`}>
         {icons[cleaning_status]}
         {labels[cleaning_status]}
       </span>
@@ -288,18 +261,31 @@ export default function CheckoutReport() {
   const formatTime = (timeString) => {
     if (!timeString) return '-';
 
-    console.log('[DEBUG formatTime] Input:', timeString);
-
-    // If it's just a time (HH:MM or HH:MM:SS), extract HH:MM
-    if (/^\d{2}:\d{2}(:\d{2})?$/.test(timeString)) {
-      console.log('[DEBUG formatTime] Simple time format, returning:', timeString.substring(0, 5));
-      return timeString.substring(0, 5); // Return HH:MM
+    // Handle TIME format (HH:MM, HH:MM:SS, or HH:MM:SS.mmm) - convert to 12-hour format
+    if (/^\d{2}:\d{2}/.test(timeString) && !timeString.includes('T') && !timeString.includes('Z')) {
+      const [hours, minutes] = timeString.split(':');
+      const hour = parseInt(hours);
+      const period = hour >= 12 ? 'PM' : 'AM';
+      const displayHour = hour % 12 || 12;
+      return `${displayHour}:${minutes} ${period}`;
     }
 
-    // Otherwise, format as Colombia time
-    const result = formatColombiaTime(timeString, { hour: '2-digit', minute: '2-digit' });
-    console.log('[DEBUG formatTime] Colombia time result:', result);
-    return result;
+    // Handle TIMESTAMP format - use the configured timezone with AM/PM format
+    if (timeString.includes('T') || timeString.includes('Z')) {
+      try {
+        const date = new Date(timeString);
+        return date.toLocaleTimeString('en-US', {
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true,
+          timeZone: timezone
+        });
+      } catch (e) {
+        return '-';
+      }
+    }
+
+    return '-';
   };
 
   const handlePrint = () => {
@@ -322,24 +308,14 @@ export default function CheckoutReport() {
           <h1 className="text-2xl font-bold text-gray-900">Reporte de Checkouts</h1>
           <p className="text-gray-600">Control de salidas y limpieza</p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex gap-3 items-center">
           <input
             type="date"
             value={date}
             onChange={(e) => setDate(e.target.value)}
             className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
           />
-          <button
-            onClick={() => setShowCompleted(!showCompleted)}
-            className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-colors ${
-              showCompleted
-                ? 'bg-green-600 text-white hover:bg-green-700'
-                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-            }`}
-          >
-            <CheckCircle className="w-5 h-5" />
-            {showCompleted ? 'Ocultar' : 'Mostrar'} Completadas
-          </button>
+
           <button
             onClick={handlePrint}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
@@ -361,7 +337,7 @@ export default function CheckoutReport() {
 
       {/* Summary Card */}
       <div className="bg-white rounded-lg shadow p-6 print:shadow-none">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           <div className="flex items-center gap-3">
             <div className="p-3 bg-blue-100 rounded-lg">
               <Calendar className="w-6 h-6 text-blue-600" />
@@ -373,8 +349,18 @@ export default function CheckoutReport() {
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="p-3 bg-yellow-100 rounded-lg">
-              <AlertCircle className="w-6 h-6 text-yellow-600" />
+            <div className="relative">
+              <div className="p-3 bg-yellow-100 rounded-lg">
+                <AlertCircle className="w-6 h-6 text-yellow-600" />
+              </div>
+              <label className="absolute -top-1 -right-1 cursor-pointer print:hidden">
+                <input
+                  type="checkbox"
+                  checked={statusFilters.pending}
+                  onChange={() => handleStatusFilterChange('pending')}
+                  className="w-4 h-4 text-yellow-600 rounded focus:ring-2 focus:ring-yellow-500"
+                />
+              </label>
             </div>
             <div>
               <p className="text-sm text-gray-600">Pendientes</p>
@@ -385,8 +371,18 @@ export default function CheckoutReport() {
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="p-3 bg-blue-100 rounded-lg">
-              <Loader className="w-6 h-6 text-blue-600" />
+            <div className="relative">
+              <div className="p-3 bg-blue-100 rounded-lg">
+                <Loader className="w-6 h-6 text-blue-600" />
+              </div>
+              <label className="absolute -top-1 -right-1 cursor-pointer print:hidden">
+                <input
+                  type="checkbox"
+                  checked={statusFilters.in_progress}
+                  onChange={() => handleStatusFilterChange('in_progress')}
+                  className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                />
+              </label>
             </div>
             <div>
               <p className="text-sm text-gray-600">En Progreso</p>
@@ -397,8 +393,40 @@ export default function CheckoutReport() {
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="p-3 bg-green-100 rounded-lg">
-              <CheckCircle className="w-6 h-6 text-green-600" />
+            <div className="relative">
+              <div className="p-3 bg-orange-100 rounded-lg">
+                <LogOut className="w-6 h-6 text-orange-600" />
+              </div>
+              <label className="absolute -top-1 -right-1 cursor-pointer print:hidden">
+                <input
+                  type="checkbox"
+                  checked={statusFilters.checked_out}
+                  onChange={() => handleStatusFilterChange('checked_out')}
+                  className="w-4 h-4 text-orange-600 rounded focus:ring-2 focus:ring-orange-500"
+                />
+              </label>
+            </div>
+            <div>
+              <p className="text-sm text-gray-600">Checked Out</p>
+              <p className="text-2xl font-bold text-gray-900">
+                {report?.checkouts.filter(c => c.actual_checkout_time && c.cleaning_status !== 'completed').length || 0}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <div className="relative">
+              <div className="p-3 bg-green-100 rounded-lg">
+                <CheckCircle className="w-6 h-6 text-green-600" />
+              </div>
+              <label className="absolute -top-1 -right-1 cursor-pointer print:hidden">
+                <input
+                  type="checkbox"
+                  checked={statusFilters.completed}
+                  onChange={() => handleStatusFilterChange('completed')}
+                  className="w-4 h-4 text-green-600 rounded focus:ring-2 focus:ring-green-500"
+                />
+              </label>
             </div>
             <div>
               <p className="text-sm text-gray-600">Completados</p>
@@ -411,17 +439,20 @@ export default function CheckoutReport() {
       </div>
 
       {/* Checkout Table */}
-      <div className="bg-white rounded-lg shadow overflow-hidden print:shadow-none">
+      <div className="bg-white rounded-lg shadow overflow-x-auto print:shadow-none">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Propiedad</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Hora Programada</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Hora Reportada</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Asignado A</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tiempo</th>
-              <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase print:hidden">Acciones</th>
+              <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">ID Res.</th>
+              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Propiedad</th>
+              <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Ref</th>
+              <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Tipo</th>
+              <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">H. Prog.</th>
+              <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">H. Report.</th>
+              <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
+              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Asignado</th>
+              <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Tiempo</th>
+              <th className="px-2 py-2 text-center text-xs font-medium text-gray-500 uppercase print:hidden">Acciones</th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
@@ -430,90 +461,80 @@ export default function CheckoutReport() {
                 const totalGuests = checkout.adults + checkout.children + checkout.infants;
                 return (
                   <tr key={checkout.id} className={checkout.actual_checkout_time ? 'bg-yellow-50' : ''}>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-2 py-3 whitespace-nowrap">
+                      <span className="text-xs font-mono text-gray-700">#{checkout.id}</span>
+                    </td>
+                    <td className="px-3 py-3 whitespace-nowrap">
                       <div>
-                        <div className="font-medium text-gray-900">{checkout.property_name}</div>
-                        <div className="text-sm text-gray-500">{checkout.property_type_name}</div>
+                        <div className="font-medium text-sm text-gray-900">{checkout.property_name}</div>
+                        <div className="text-xs text-gray-500">{checkout.property_type_name}</div>
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-2 py-3 whitespace-nowrap text-xs text-gray-600">
+                      {checkout.reference || '-'}
+                    </td>
+                    <td className="px-2 py-3 whitespace-nowrap text-xs text-gray-600">
+                      {checkout.cleaning_task_type === 'check_out' ? 'Aseo General' :
+                       checkout.cleaning_task_type === 'stay_over' ? 'Aseo Liviano' :
+                       checkout.cleaning_task_type === 'deep_clean' ? 'Aseo Profundo' :
+                       checkout.cleaning_task_type || '-'}
+                    </td>
+                    <td className="px-2 py-3 whitespace-nowrap">
                       {(checkout.actual_checkout_time || checkout.checkout_time) ? (
-                        <div className={`flex items-center gap-2 ${checkout.actual_checkout_time ? 'text-orange-700 font-medium' : 'text-gray-700'}`}>
-                          <Clock className="w-4 h-4" />
+                        <div className={`flex items-center gap-1 text-xs ${checkout.actual_checkout_time ? 'text-orange-700 font-medium' : 'text-gray-700'}`}>
+                          <Clock className="w-3 h-3" />
                           {formatTime(checkout.actual_checkout_time || checkout.checkout_time)}
                         </div>
                       ) : (
-                        <span className="text-gray-400">-</span>
+                        <span className="text-gray-400 text-xs">-</span>
                       )}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-2 py-3 whitespace-nowrap">
                       {checkout.started_at ? (
-                        <div className="flex items-center gap-2 text-green-700 font-medium">
-                          <CheckCircle className="w-4 h-4" />
+                        <div className="flex items-center gap-1 text-xs text-green-700 font-medium">
+                          <CheckCircle className="w-3 h-3" />
                           {formatTime(checkout.started_at)}
                         </div>
                       ) : (
-                        <span className="text-gray-400">-</span>
+                        <span className="text-gray-400 text-xs">-</span>
                       )}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-2 py-3 whitespace-nowrap">
                       {getStatusBadge(checkout)}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                    <td className="px-3 py-3 whitespace-nowrap text-xs text-gray-600">
                       {checkout.assigned_to_name || '-'}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-2 py-3 whitespace-nowrap">
                       {(() => {
                         const timeData = calculateElapsedTime(checkout);
                         if (timeData.time === '-') {
-                          return <span className="text-gray-400">-</span>;
+                          return <span className="text-gray-400 text-xs">-</span>;
                         }
                         return (
                           <div className="flex flex-col">
-                            <div className={`flex items-center gap-1 font-mono text-sm ${timeData.color}`}>
-                              <Timer className="w-4 h-4" />
+                            <div className={`flex items-center gap-1 font-mono text-xs ${timeData.color}`}>
+                              <Timer className="w-3 h-3" />
                               {timeData.time}
                             </div>
                             {timeData.label && (
-                              <span className="text-xs text-gray-500 ml-5">{timeData.label}</span>
+                              <span className="text-xs text-gray-500 ml-4">{timeData.label}</span>
                             )}
                           </div>
                         );
                       })()}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-center print:hidden">
-                      {checkout.reservation_status === 'active' && !checkout.completed_at && (
-                        <div className="flex items-center justify-center gap-2">
-                          {/* Report/Edit Checkout Button - disabled when task has started */}
-                          <button
-                            onClick={() => handleReportCheckout(checkout)}
-                            disabled={checkout.started_at !== null}
-                            className={`p-2 rounded-lg transition-colors ${
-                              checkout.started_at
-                                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                                : checkout.actual_checkout_time
-                                  ? 'bg-orange-100 text-orange-700 hover:bg-orange-200'
-                                  : 'bg-green-100 text-green-700 hover:bg-green-200'
-                            }`}
-                            title={
-                              checkout.started_at
-                                ? "No se puede corregir - tarea iniciada"
-                                : checkout.actual_checkout_time
-                                  ? "Corregir Checkout"
-                                  : "Reportar Checkout"
-                            }
-                          >
-                            {checkout.actual_checkout_time ? <Edit className="w-4 h-4" /> : <LogOut className="w-4 h-4" />}
-                          </button>
-
+                    <td className="px-2 py-3 whitespace-nowrap text-center print:hidden">
+                      {!checkout.completed_at && (
+                        <div className="flex items-center justify-center gap-1">
                           {/* Start Task Button - only show if checkout reported and task not started */}
                           {checkout.actual_checkout_time && !checkout.started_at && (
                             <button
                               onClick={() => handleStartTask(checkout)}
-                              className="p-2 rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors"
+                              className="p-1.5 rounded bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors"
                               title="Iniciar Tarea"
                             >
-                              <Play className="w-4 h-4" />
+                              <Play className="w-3.5 h-3.5" />
                             </button>
                           )}
 
@@ -521,10 +542,10 @@ export default function CheckoutReport() {
                           {checkout.started_at && !checkout.completed_at && (
                             <button
                               onClick={() => handleCompleteTask(checkout)}
-                              className="p-2 rounded-lg bg-green-100 text-green-700 hover:bg-green-200 transition-colors"
+                              className="p-1.5 rounded bg-green-100 text-green-700 hover:bg-green-200 transition-colors"
                               title="Terminar Tarea"
                             >
-                              <CheckCircle className="w-4 h-4" />
+                              <CheckCircle className="w-3.5 h-3.5" />
                             </button>
                           )}
                         </div>
@@ -535,7 +556,7 @@ export default function CheckoutReport() {
               })
             ) : (
               <tr>
-                <td colSpan="7" className="px-6 py-12 text-center text-gray-500">
+                <td colSpan="10" className="px-6 py-12 text-center text-gray-500">
                   No hay checkouts programados para esta fecha
                 </td>
               </tr>
@@ -551,153 +572,6 @@ export default function CheckoutReport() {
       </div>
 
       {/* Checkout Confirmation Modal */}
-      {showCheckoutModal && selectedCheckout && (
-        <div className="fixed inset-0 z-50 overflow-y-auto">
-          {/* Backdrop */}
-          <div className="fixed inset-0 bg-black bg-opacity-50" onClick={() => setShowCheckoutModal(false)} />
-
-          {/* Modal */}
-          <div className="flex items-center justify-center min-h-screen p-4">
-            <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full p-6">
-              {/* Modal Header */}
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-bold text-gray-900">Reportar Checkout</h2>
-                <button onClick={() => setShowCheckoutModal(false)} className="text-gray-400 hover:text-gray-600">
-                  <X className="w-6 h-6" />
-                </button>
-              </div>
-
-              {/* Modal Body */}
-              <div className="space-y-4">
-                <div className="p-4 bg-blue-50 rounded-lg">
-                  <p className="text-sm text-gray-700">
-                    <span className="font-semibold">Propiedad:</span> {selectedCheckout.property_name}
-                  </p>
-                  <p className="text-sm text-gray-700 mt-1">
-                    <span className="font-semibold">Checkout programado:</span> {selectedCheckout.checkout_time || 'No especificado'}
-                  </p>
-                  <p className="text-sm text-gray-700 mt-1">
-                    <span className="font-semibold">Huéspedes:</span> {selectedCheckout.adults + selectedCheckout.children + selectedCheckout.infants}
-                  </p>
-                </div>
-
-                {/* Checkout Type Selection */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    ¿Cuándo sale el huésped?
-                  </label>
-                  <div className="space-y-2">
-                    <label className="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
-                      <input
-                        type="radio"
-                        name="checkoutType"
-                        value="now"
-                        checked={checkoutType === 'now'}
-                        onChange={(e) => setCheckoutType(e.target.value)}
-                        className="mr-3"
-                      />
-                      <div>
-                        <div className="font-medium text-gray-900">Checkout Inmediato</div>
-                        <div className="text-sm text-gray-500">El huésped ya salió o está saliendo ahora</div>
-                      </div>
-                    </label>
-
-                    <label className="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
-                      <input
-                        type="radio"
-                        name="checkoutType"
-                        value="scheduled"
-                        checked={checkoutType === 'scheduled'}
-                        onChange={(e) => setCheckoutType(e.target.value)}
-                        className="mr-3"
-                      />
-                      <div>
-                        <div className="font-medium text-gray-900">Checkout Programado</div>
-                        <div className="text-sm text-gray-500">El huésped saldrá a una hora específica</div>
-                      </div>
-                    </label>
-                  </div>
-                </div>
-
-                {/* Time Selector (only shown when scheduled) */}
-                {checkoutType === 'scheduled' && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Hora de salida
-                    </label>
-                    <input
-                      type="time"
-                      value={scheduledTime}
-                      onChange={(e) => setScheduledTime(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                      required
-                    />
-                    <p className="text-xs text-gray-500 mt-1">
-                      Selecciona la hora aproximada en que el huésped saldrá
-                    </p>
-                  </div>
-                )}
-
-                {/* Priority Checkbox */}
-                <div className="flex items-center">
-                  <input
-                    type="checkbox"
-                    id="isPriority"
-                    checked={isPriority}
-                    onChange={(e) => setIsPriority(e.target.checked)}
-                    className="w-4 h-4 text-red-600 border-gray-300 rounded focus:ring-red-500"
-                  />
-                  <label htmlFor="isPriority" className="ml-2 text-sm font-medium text-gray-700">
-                    🔴 Marcar como <span className="text-red-600">PRIORIDAD</span>
-                  </label>
-                </div>
-
-                <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                  <p className="text-sm text-yellow-800">
-                    ⚠️ Esto creará una tarea de limpieza pendiente y notificará al equipo de housekeeping vía Telegram.
-                  </p>
-                </div>
-              </div>
-
-              {/* Modal Actions */}
-              <div className="flex justify-between items-center mt-6">
-                {/* Cancel Checkout Button - only show when editing existing checkout */}
-                {selectedCheckout.actual_checkout_time ? (
-                  <button
-                    type="button"
-                    onClick={handleCancelCheckout}
-                    className="px-4 py-2 text-red-700 bg-red-100 rounded-lg hover:bg-red-200 flex items-center gap-2"
-                  >
-                    <XCircle className="w-4 h-4" />
-                    Cancelar Checkout
-                  </button>
-                ) : (
-                  <div></div>
-                )}
-
-                <div className="flex space-x-3">
-                  <button
-                    type="button"
-                    onClick={() => setShowCheckoutModal(false)}
-                    className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
-                  >
-                    Cerrar
-                  </button>
-                  <button
-                    onClick={handleConfirmCheckout}
-                    disabled={checkoutType === 'scheduled' && !scheduledTime}
-                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                  >
-                    <LogOut className="w-4 h-4" />
-                    {selectedCheckout.actual_checkout_time ? 'Actualizar' : 'Confirmar'} Checkout
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Start Task Modal */}
       {showStartTaskModal && selectedTask && (
         <div className="fixed inset-0 z-50 overflow-y-auto">
@@ -783,6 +657,61 @@ export default function CheckoutReport() {
                 >
                   <Play className="w-4 h-4" />
                   Iniciar Tarea
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Complete Task Confirmation Modal */}
+      {showCompleteTaskModal && taskToComplete && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          {/* Backdrop */}
+          <div className="fixed inset-0 bg-black bg-opacity-50" onClick={() => setShowCompleteTaskModal(false)} />
+
+          {/* Modal */}
+          <div className="flex items-center justify-center min-h-screen p-4">
+            <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+              {/* Modal Header */}
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-bold text-gray-900">Confirmar Completación</h2>
+                <button onClick={() => setShowCompleteTaskModal(false)} className="text-gray-400 hover:text-gray-600">
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+
+              {/* Modal Body */}
+              <div className="space-y-4">
+                <div className="p-4 bg-green-50 rounded-lg">
+                  <p className="text-sm text-gray-700">
+                    <span className="font-semibold">Propiedad:</span> {taskToComplete.property_name}
+                  </p>
+                  <p className="text-sm text-gray-700 mt-1">
+                    <span className="font-semibold">Asignado a:</span> {taskToComplete.assigned_to_name || 'Sin asignar'}
+                  </p>
+                </div>
+
+                <p className="text-gray-700">
+                  ¿Está seguro que desea marcar esta tarea como completada?
+                </p>
+              </div>
+
+              {/* Modal Actions */}
+              <div className="flex justify-end space-x-3 mt-6">
+                <button
+                  type="button"
+                  onClick={() => setShowCompleteTaskModal(false)}
+                  className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={confirmCompleteTask}
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2"
+                >
+                  <CheckCircle className="w-4 h-4" />
+                  Confirmar
                 </button>
               </div>
             </div>

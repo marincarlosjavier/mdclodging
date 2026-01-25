@@ -110,8 +110,13 @@ export default function OccupancyCalendar() {
   // Get reservation color based on status and dates
   const getReservationColor = (reservation) => {
     const today = getTodayInColombia();
-    const checkIn = reservation.check_in_date;
-    const checkOut = reservation.check_out_date;
+    // Extract date part from ISO string or date string
+    const getDatePart = (dateStr) => {
+      if (!dateStr) return '';
+      return dateStr.split('T')[0];
+    };
+    const checkIn = getDatePart(reservation.check_in_date);
+    const checkOut = getDatePart(reservation.check_out_date);
 
     if (checkOut === today) {
       return 'bg-red-500 hover:bg-red-600'; // Checkout today

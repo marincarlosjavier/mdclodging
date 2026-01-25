@@ -8,30 +8,51 @@ const router = express.Router();
 router.use(authenticate);
 
 // Helper function to generate cleaning tasks for a reservation
-async function generateCleaningTasks(client, reservation, tenantId, stayOverInterval) {
+async function generateCleaningTasks(client, reservation, tenantId, stayOverInterval, deepCleanInterval = 30) {
   const tasks = [];
   const checkInDate = new Date(reservation.check_in_date);
   const checkOutDate = new Date(reservation.check_out_date);
 
-  // 1. Generate check-out cleaning task (on checkout date)
+  // Calculate days of stay
+  const daysDiff = Math.floor((checkOutDate - checkInDate) / (1000 * 60 * 60 * 24));
+
+  // 1. Generate check-out cleaning task (Aseo General - on checkout date)
   tasks.push({
     type: 'check_out',
     date: checkOutDate
   });
 
-  // 2. Generate stay-over cleaning tasks (every X days during stay)
-  const daysDiff = Math.floor((checkOutDate - checkInDate) / (1000 * 60 * 60 * 24));
-
+  // 2. Generate stay-over cleaning tasks (Aseo Liviano - every X days during stay)
   if (daysDiff > stayOverInterval) {
     let currentDate = new Date(checkInDate);
     currentDate.setDate(currentDate.getDate() + stayOverInterval);
 
     while (currentDate < checkOutDate) {
+      // Check if this date coincides with a deep clean
+      const daysFromCheckIn = Math.floor((currentDate - checkInDate) / (1000 * 60 * 60 * 24));
+      const isDeepCleanDay = daysFromCheckIn % deepCleanInterval === 0;
+
+      if (!isDeepCleanDay) {
+        tasks.push({
+          type: 'stay_over',
+          date: new Date(currentDate)
+        });
+      }
+      currentDate.setDate(currentDate.getDate() + stayOverInterval);
+    }
+  }
+
+  // 3. Generate deep cleaning tasks (Aseo Profundo - every 30 days during stay)
+  if (daysDiff > deepCleanInterval) {
+    let currentDate = new Date(checkInDate);
+    currentDate.setDate(currentDate.getDate() + deepCleanInterval);
+
+    while (currentDate < checkOutDate) {
       tasks.push({
-        type: 'stay_over',
+        type: 'deep_clean',
         date: new Date(currentDate)
       });
-      currentDate.setDate(currentDate.getDate() + stayOverInterval);
+      currentDate.setDate(currentDate.getDate() + deepCleanInterval);
     }
   }
 
@@ -136,16 +157,56 @@ router.get('/checkin-report', asyncHandler(async (req, res) => {
 
 // GET /api/reservations/checkout-report - Get checkout report
 router.get('/checkout-report', asyncHandler(async (req, res) => {
-  const { date, show_completed } = req.query;
+  const { date, statuses } = req.query;
   const targetDate = date || new Date().toISOString().split('T')[0];
 
-  // Build query to show:
-  // 1. All pending/in_progress tasks (regardless of date)
-  // 2. Completed tasks only for the selected date (if show_completed=true)
+  // Parse statuses from comma-separated list
+  const statusList = statuses ? statuses.split(',') : ['pending', 'checked_out', 'in_progress'];
+
+  // Build conditions based on selected statuses
+  const conditions = [];
+  const params = [req.tenantId];
+
+  // Map frontend statuses to backend conditions
+  if (statusList.includes('pending')) {
+    conditions.push(`(ct.status = 'pending' AND r.actual_checkout_time IS NULL)`);
+  }
+  if (statusList.includes('checked_out')) {
+    conditions.push(`(ct.status = 'pending' AND r.actual_checkout_time IS NOT NULL AND ct.started_at IS NULL)`);
+  }
+  if (statusList.includes('in_progress')) {
+    conditions.push(`ct.status = 'in_progress'`);
+  }
+  if (statusList.includes('completed')) {
+    params.push(targetDate);
+    // Show completed tasks based on when they were completed, not checkout date
+    conditions.push(`(ct.status = 'completed' AND DATE(ct.completed_at AT TIME ZONE 'America/Bogota') = $${params.length})`);
+  }
+
+  // If no conditions, return empty result
+  if (conditions.length === 0) {
+    return res.json({
+      date: targetDate,
+      total_checkouts: 0,
+      checkouts: []
+    });
+  }
+
+  // Allow checked_out reservations when showing completed tasks or checked_out filter
+  const reservationStatusCondition = (statusList.includes('completed') || statusList.includes('checked_out') || statusList.includes('in_progress'))
+    ? `r.status IN ('active', 'checked_in', 'checked_out')`
+    : `r.status IN ('active', 'checked_in')`;
+
+  // Add date filter: for non-completed tasks, filter by check_out_date
+  // For completed tasks, we already filter by completed_at in the conditions
+  params.push(targetDate);
+  const dateFilterParam = params.length;
+
   const result = await pool.query(
     `SELECT
       r.id,
       r.check_out_date,
+      r.reference,
       COALESCE(r.checkout_time, '12:00') as checkout_time,
       r.actual_checkout_time,
       r.adults,
@@ -155,6 +216,7 @@ router.get('/checkout-report', asyncHandler(async (req, res) => {
       p.name as property_name,
       pt.name as property_type_name,
       ct.id as cleaning_task_id,
+      ct.task_type as cleaning_task_type,
       ct.status as cleaning_status,
       ct.checkout_reported_at,
       ct.assigned_to,
@@ -168,12 +230,13 @@ router.get('/checkout-report', asyncHandler(async (req, res) => {
      LEFT JOIN cleaning_tasks ct ON ct.reservation_id = r.id AND ct.task_type = 'check_out'
      LEFT JOIN users u ON u.id = ct.assigned_to
      WHERE r.tenant_id = $1
-       AND r.status = 'active'
+       AND ${reservationStatusCondition}
        AND ct.id IS NOT NULL
+       AND (${conditions.join(' OR ')})
        AND (
-         -- Show all non-completed tasks
-         ct.status IN ('pending', 'in_progress')
-         ${show_completed === 'true' ? `OR (ct.status = 'completed' AND r.check_out_date = $2)` : ''}
+         (ct.status != 'completed' AND r.check_out_date = $${dateFilterParam})
+         OR
+         (ct.status = 'completed' AND DATE(ct.completed_at AT TIME ZONE 'America/Bogota') = $${dateFilterParam})
        )
      ORDER BY
        CASE WHEN ct.status = 'completed' THEN 1 ELSE 0 END,
@@ -181,7 +244,7 @@ router.get('/checkout-report', asyncHandler(async (req, res) => {
        COALESCE(r.checkout_time, '12:00'),
        r.actual_checkout_time,
        p.name`,
-    [req.tenantId, targetDate]
+    params
   );
 
   res.json({
@@ -298,10 +361,11 @@ router.post('/', requireRole('admin', 'supervisor'), asyncHandler(async (req, re
 
     // Get tenant settings for cleaning intervals
     const tenantSettings = await client.query(
-      'SELECT stay_over_interval FROM tenants WHERE id = $1',
+      'SELECT stay_over_interval, deep_cleaning_interval FROM tenants WHERE id = $1',
       [req.tenantId]
     );
     const stayOverInterval = tenantSettings.rows[0]?.stay_over_interval || 3;
+    const deepCleanInterval = tenantSettings.rows[0]?.deep_cleaning_interval || 30;
 
     // Insert reservation
     const reservationResult = await client.query(
@@ -316,7 +380,7 @@ router.post('/', requireRole('admin', 'supervisor'), asyncHandler(async (req, re
     const reservation = reservationResult.rows[0];
 
     // Generate cleaning tasks
-    const tasksCreated = await generateCleaningTasks(client, reservation, req.tenantId, stayOverInterval);
+    const tasksCreated = await generateCleaningTasks(client, reservation, req.tenantId, stayOverInterval, deepCleanInterval);
 
     await client.query('COMMIT');
 
@@ -341,6 +405,7 @@ router.put('/:id', requireRole('admin', 'supervisor'), asyncHandler(async (req, 
     check_out_date,
     checkin_time,
     checkout_time,
+    actual_checkin_time,
     actual_checkout_time,
     adults,
     children,
@@ -372,9 +437,6 @@ router.put('/:id', requireRole('admin', 'supervisor'), asyncHandler(async (req, 
     const isCheckoutReported = actual_checkout_time && !currentReservation.actual_checkout_time;
     const isCheckoutCancelled = actual_checkout_time === null && currentReservation.actual_checkout_time;
 
-    // Convert actual_checkout_time to Date object if it's a string
-    const actualCheckoutTimeValue = actual_checkout_time ? new Date(actual_checkout_time) : null;
-
     // Build update query dynamically to allow setting NULL
     const updates = [];
     const params = [];
@@ -405,10 +467,15 @@ router.put('/:id', requireRole('admin', 'supervisor'), asyncHandler(async (req, 
       updates.push(`checkout_time = $${paramCount}`);
       params.push(checkout_time);
     }
+    if (actual_checkin_time !== undefined) {
+      paramCount++;
+      updates.push(`actual_checkin_time = $${paramCount}`);
+      params.push(actual_checkin_time);
+    }
     if (actual_checkout_time !== undefined) {
       paramCount++;
       updates.push(`actual_checkout_time = $${paramCount}`);
-      params.push(actualCheckoutTimeValue);
+      params.push(actual_checkout_time);
     }
     if (adults !== undefined) {
       paramCount++;

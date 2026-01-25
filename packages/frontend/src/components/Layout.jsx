@@ -41,26 +41,23 @@ export default function Layout() {
 
   const navItems = [
     { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    ...(hasRole('admin', 'supervisor')
+      ? [
+          { path: '/occupancy-calendar', label: 'Calendario', icon: Calendar },
+          { path: '/reservations', label: 'Reservas', icon: List },
+          { path: '/checkout-report', label: 'Housekeeping', icon: FileText },
+          { path: '/cleaning-settlements', label: 'Liquidaciones', icon: DollarSign }
+        ]
+      : []),
+    { path: '/breakfast-list', label: 'Lista de Desayunos', icon: Coffee },
     { path: '/tasks', label: 'Tareas de Mantenimiento', icon: ListTodo },
     ...(hasRole('admin', 'supervisor')
       ? [
-          { path: '/today-checkins', label: 'Check-ins de Hoy', icon: DoorOpen },
-          { path: '/occupancy-calendar', label: 'Calendario de Ocupación', icon: Calendar },
           { path: '/property-types', label: 'Tipos de Propiedad', icon: Building2 },
           { path: '/properties', label: 'Propiedades', icon: Building2 },
-          { path: '/reservations', label: 'Reservas', icon: List },
-          { path: '/checkin-report', label: 'Preparación Check-ins', icon: ClipboardList },
-          { path: '/checkout-report', label: 'Reporte de Checkouts', icon: FileText },
           { path: '/catalog', label: 'Catálogo', icon: List },
           { path: '/users', label: 'Usuarios', icon: Users },
           { path: '/telegram', label: 'Telegram', icon: MessageCircle }
-        ]
-      : []),
-    { path: '/cleaning-tasks', label: 'Tareas de Limpieza', icon: ClipboardList },
-    { path: '/breakfast-list', label: 'Lista de Desayunos', icon: Coffee },
-    ...(hasRole('admin', 'supervisor')
-      ? [
-          { path: '/cleaning-settlements', label: 'Liquidaciones', icon: DollarSign }
         ]
       : []),
     ...(hasRole('admin')
