@@ -168,40 +168,54 @@ router.get('/checkout-report', asyncHandler(async (req, res) => {
   const params = [req.tenantId];
 
   // Map frontend statuses to backend conditions
-  if (statusList.includes('pending')) {
-    conditions.push(`(ct.status = 'pending' AND r.actual_checkout_time IS NULL)`);
-  }
+  const taskConditions = [];
+
   if (statusList.includes('checked_out')) {
-    conditions.push(`(ct.status = 'pending' AND r.actual_checkout_time IS NOT NULL AND ct.started_at IS NULL)`);
+    taskConditions.push(`(ct.status = 'pending' AND r.actual_checkout_time IS NOT NULL AND ct.started_at IS NULL)`);
   }
   if (statusList.includes('in_progress')) {
-    conditions.push(`ct.status = 'in_progress'`);
+    taskConditions.push(`ct.status = 'in_progress'`);
   }
   if (statusList.includes('completed')) {
     params.push(targetDate);
     // Show completed tasks based on when they were completed, not checkout date
-    conditions.push(`(ct.status = 'completed' AND DATE(ct.completed_at AT TIME ZONE 'America/Bogota') = $${params.length})`);
+    taskConditions.push(`(ct.status = 'completed' AND DATE(ct.completed_at AT TIME ZONE 'America/Bogota') = $${params.length})`);
   }
 
-  // If no conditions, return empty result
-  if (conditions.length === 0) {
+  // Build WHERE clause
+  params.push(targetDate);
+  const dateFilterParam = params.length;
+
+  let whereClause = `r.tenant_id = $1 AND r.status IN ('active', 'checked_in', 'checked_out')`;
+
+  // "pending" (Esp. Check out) - show reservations with checkout today but no actual_checkout_time
+  if (statusList.includes('pending')) {
+    if (taskConditions.length > 0) {
+      // Also include other task conditions
+      whereClause += ` AND (
+        (r.check_out_date = $${dateFilterParam} AND r.actual_checkout_time IS NULL)
+        OR (ct.id IS NOT NULL AND (${taskConditions.join(' OR ')}))
+      )`;
+    } else {
+      // Only pending
+      whereClause += ` AND r.check_out_date = $${dateFilterParam} AND r.actual_checkout_time IS NULL`;
+    }
+  } else if (taskConditions.length > 0) {
+    // Other statuses require cleaning task to exist
+    whereClause += ` AND ct.id IS NOT NULL AND (${taskConditions.join(' OR ')})`;
+    whereClause += ` AND (
+      (ct.status != 'completed' AND r.check_out_date = $${dateFilterParam})
+      OR
+      (ct.status = 'completed' AND DATE(ct.completed_at AT TIME ZONE 'America/Bogota') = $${dateFilterParam})
+    )`;
+  } else {
+    // No conditions, return empty result
     return res.json({
       date: targetDate,
       total_checkouts: 0,
       checkouts: []
     });
   }
-
-  // Allow checked_out reservations when showing any cleaning task status
-  // (pending, checked_out, in_progress, or completed)
-  const reservationStatusCondition = (statusList.includes('pending') || statusList.includes('completed') || statusList.includes('checked_out') || statusList.includes('in_progress'))
-    ? `r.status IN ('active', 'checked_in', 'checked_out')`
-    : `r.status IN ('active', 'checked_in')`;
-
-  // Add date filter: for non-completed tasks, filter by check_out_date
-  // For completed tasks, we already filter by completed_at in the conditions
-  params.push(targetDate);
-  const dateFilterParam = params.length;
 
   const result = await pool.query(
     `SELECT
@@ -230,15 +244,7 @@ router.get('/checkout-report', asyncHandler(async (req, res) => {
      LEFT JOIN property_types pt ON p.property_type_id = pt.id
      LEFT JOIN cleaning_tasks ct ON ct.reservation_id = r.id AND ct.task_type = 'check_out'
      LEFT JOIN users u ON u.id = ct.assigned_to
-     WHERE r.tenant_id = $1
-       AND ${reservationStatusCondition}
-       AND ct.id IS NOT NULL
-       AND (${conditions.join(' OR ')})
-       AND (
-         (ct.status != 'completed' AND r.check_out_date = $${dateFilterParam})
-         OR
-         (ct.status = 'completed' AND DATE(ct.completed_at AT TIME ZONE 'America/Bogota') = $${dateFilterParam})
-       )
+     WHERE ${whereClause}
      ORDER BY
        CASE WHEN ct.status = 'completed' THEN 1 ELSE 0 END,
        r.check_out_date,

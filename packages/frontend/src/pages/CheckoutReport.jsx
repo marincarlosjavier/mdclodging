@@ -253,8 +253,8 @@ export default function CheckoutReport() {
   const getStatusBadge = (checkout) => {
     const { cleaning_status, actual_checkout_time } = checkout;
 
-    // If pending and no actual_checkout_time, it's waiting for checkout
-    if (cleaning_status === 'pending' && !actual_checkout_time) {
+    // If no actual_checkout_time (regardless of cleaning task status), it's waiting for checkout
+    if (!actual_checkout_time) {
       return (
         <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
           <Clock className="w-3 h-3" />
