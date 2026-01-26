@@ -9,7 +9,7 @@ export default function Settings() {
   const [loading, setLoading] = useState(false);
   const [tenantData, setTenantData] = useState({
     stay_over_interval: 3,
-    deep_cleaning_interval: 30,
+    deep_cleaning_interval: 11,
     timezone: 'America/Bogota'
   });
 
@@ -96,18 +96,18 @@ export default function Settings() {
           {/* Deep Cleaning Interval */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Aseo Profundo (días)
+              Aseo Profundo (cada N check-outs)
             </label>
             <input
               type="number"
-              min="7"
-              max="90"
+              min="3"
+              max="50"
               value={tenantData.deep_cleaning_interval}
               onChange={(e) => setTenantData({...tenantData, deep_cleaning_interval: parseInt(e.target.value)})}
               className="w-full max-w-xs px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
             />
             <p className="text-xs text-gray-500 mt-1">
-              Limpieza detallada y profunda de toda la propiedad. (Por defecto: 30 días)
+              Limpieza detallada y profunda de toda la propiedad cada N limpiezas de check-out completadas. (Por defecto: 11 check-outs)
             </p>
           </div>
 
