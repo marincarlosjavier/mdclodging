@@ -250,14 +250,15 @@ export default function Reservations() {
         return getDatePart(r.check_in_date) < today && getDatePart(r.check_out_date) > today && ['active', 'checked_in'].includes(r.status);
       });
     } else if (activeFilter === 'available') {
-      // Available properties - show properties without active reservations (checkout after today)
+      // Available properties - show properties without active guests today
       const occupiedPropertyIds = new Set(
         reservations
           .filter(r => {
             if (!['active', 'checked_in'].includes(r.status)) return false;
+            const checkInDate = getDatePart(r.check_in_date);
             const checkOutDate = getDatePart(r.check_out_date);
-            // Only consider occupied if checkout is AFTER today
-            return checkOutDate > today;
+            // Property is occupied if check-in <= today AND checkout > today
+            return checkInDate <= today && checkOutDate > today;
           })
           .map(r => r.property_id)
       );
@@ -629,14 +630,15 @@ export default function Reservations() {
       return getDatePart(r.check_in_date) < today && getDatePart(r.check_out_date) > today && ['active', 'checked_in'].includes(r.status);
     }).length;
 
-    // Available properties (exclude properties with checkout after today)
+    // Available properties (exclude properties with active guests today)
     const occupiedPropertyIds = new Set(
       reservations
         .filter(r => {
           if (!['active', 'checked_in'].includes(r.status)) return false;
+          const checkInDate = getDatePart(r.check_in_date);
           const checkOutDate = getDatePart(r.check_out_date);
-          // Only consider occupied if checkout is AFTER today
-          return checkOutDate > today;
+          // Property is occupied if check-in <= today AND checkout > today
+          return checkInDate <= today && checkOutDate > today;
         })
         .map(r => r.property_id)
     );
