@@ -966,30 +966,30 @@ export default function Reservations() {
                   (activeFilter === 'checkouts' && reservation.status === 'checked_out');
 
                 return (
-                  <tr key={reservation.id} className={isCompleted ? 'bg-gray-50 hover:bg-gray-100' : 'hover:bg-gray-50'}>
+                  <tr key={reservation.id} className={isCompleted ? 'bg-gray-200 hover:bg-gray-200 opacity-70' : 'hover:bg-gray-50'}>
                     <td className="px-6 py-4 text-sm font-mono text-gray-700">
                       <div className="flex items-center gap-2">
-                        {isCompleted && <CheckCircle className="w-4 h-4 text-green-600" />}
-                        <span>#{reservation.id}</span>
+                        {isCompleted && <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />}
+                        <span className={isCompleted ? 'text-gray-600' : ''}>#{reservation.id}</span>
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <div className="text-sm font-medium text-gray-900">{reservation.property_name}</div>
+                      <div className={`text-sm font-medium ${isCompleted ? 'text-gray-600' : 'text-gray-900'}`}>{reservation.property_name}</div>
                       <div className="text-xs text-gray-500">{reservation.property_type_name}</div>
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-900">
+                    <td className={`px-6 py-4 text-sm ${isCompleted ? 'text-gray-600' : 'text-gray-900'}`}>
                       {reservation.reference || '-'}
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-900">
+                    <td className={`px-6 py-4 text-sm ${isCompleted ? 'text-gray-600' : 'text-gray-900'}`}>
                       {formatDate(reservation.check_in_date)}
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-900">
+                    <td className={`px-6 py-4 text-sm ${isCompleted ? 'text-gray-600' : 'text-gray-900'}`}>
                       {formatDate(reservation.check_out_date)}
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-900">
+                    <td className={`px-6 py-4 text-sm ${isCompleted ? 'text-gray-600' : 'text-gray-900'}`}>
                       {calculateNights(reservation.check_in_date, reservation.check_out_date)}
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-900">
+                    <td className={`px-6 py-4 text-sm ${isCompleted ? 'text-gray-600' : 'text-gray-900'}`}>
                       <div className="flex items-center space-x-1">
                         <Users className="w-4 h-4 text-gray-400" />
                         <span>{reservation.adults || 0}</span>
@@ -1002,7 +1002,7 @@ export default function Reservations() {
                     </td>
                     <td className="px-6 py-4">
                       {reservation.has_breakfast ? (
-                        <Coffee className="w-5 h-5 text-orange-500" />
+                        <Coffee className={`w-5 h-5 ${isCompleted ? 'text-gray-400' : 'text-orange-500'}`} />
                       ) : (
                         <span className="text-gray-400">-</span>
                       )}
