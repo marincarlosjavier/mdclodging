@@ -1315,12 +1315,23 @@ export async function notifyCheckout(tenantId, reservationData) {
       [tenantId]
     );
 
-    const { property_name, actual_checkout_time, adults, children, infants, is_priority } = reservationData;
+    const { reservation_id, property_name, checkout_time, actual_checkout_time, adults, children, infants, is_priority } = reservationData;
     const totalGuests = (adults || 0) + (children || 0) + (infants || 0);
-    const timeStr = new Date(actual_checkout_time).toLocaleTimeString('es-CO', {
+    const actualTimeStr = new Date(actual_checkout_time).toLocaleTimeString('es-CO', {
       hour: '2-digit',
       minute: '2-digit'
     });
+
+    // Format scheduled checkout time
+    let scheduledTimeStr = '';
+    if (checkout_time) {
+      // checkout_time is in HH:MM:SS format
+      const [hours, minutes] = checkout_time.split(':');
+      const hour = parseInt(hours);
+      const period = hour >= 12 ? 'PM' : 'AM';
+      const displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+      scheduledTimeStr = `${displayHour}:${minutes} ${period}`;
+    }
 
     const priorityHeader = is_priority ? '🔴 *PRIORIDAD* 🔴\n' : '';
     const priorityFooter = is_priority ? '\n\n⚠️ *ATENCIÓN: Esta limpieza es PRIORITARIA*' : '';
@@ -1328,8 +1339,10 @@ export async function notifyCheckout(tenantId, reservationData) {
     const message =
       priorityHeader +
       `🚪 *CHECKOUT REPORTADO*\n\n` +
+      `🔖 Reserva: #${reservation_id}\n` +
       `📍 Propiedad: *${property_name}*\n` +
-      `⏰ Hora: ${timeStr}\n` +
+      `🕐 Hora programada: ${scheduledTimeStr}\n` +
+      `⏰ Hora real: ${actualTimeStr}\n` +
       `👥 Huéspedes: ${totalGuests}\n\n` +
       `La propiedad está disponible para limpieza.` +
       priorityFooter;
@@ -1353,5 +1366,75 @@ export async function notifyCheckout(tenantId, reservationData) {
     console.log(`✅ Checkout notification sent to ${result.rows.length} housekeeping staff`);
   } catch (error) {
     console.error('Error sending checkout notification:', error);
+  }
+}
+
+/**
+ * Send notification to housekeeping staff when check-in is reported
+ */
+export async function notifyCheckin(tenantId, reservationData) {
+  if (!bot) {
+    console.warn('⚠️ Telegram bot not running, cannot send checkin notification');
+    return;
+  }
+
+  try {
+    // Get all housekeeping telegram contacts for this tenant
+    const result = await pool.query(
+      `SELECT DISTINCT tc.telegram_id
+       FROM telegram_contacts tc
+       JOIN users u ON u.id = tc.user_id
+       JOIN telegram_contact_permissions tcp ON tcp.contact_id = tc.id
+       JOIN telegram_permissions_catalog tpc ON tpc.id = tcp.permission_id
+       WHERE u.tenant_id = $1
+         AND tc.is_active = true
+         AND tc.user_id IS NOT NULL
+         AND tc.is_logged_in = true
+         AND tpc.code IN ('housekeeping', 'admin')
+         AND tpc.is_active = true`,
+      [tenantId]
+    );
+
+    const { reservation_id, property_name, checkin_time, actual_checkin_time, adults, children, infants } = reservationData;
+    const totalGuests = (adults || 0) + (children || 0) + (infants || 0);
+
+    // Format arrival time
+    let arrivalTimeStr = '';
+    if (actual_checkin_time) {
+      arrivalTimeStr = new Date(actual_checkin_time).toLocaleTimeString('es-CO', {
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } else if (checkin_time) {
+      // checkin_time is in HH:MM:SS format
+      const [hours, minutes] = checkin_time.split(':');
+      const hour = parseInt(hours);
+      const period = hour >= 12 ? 'PM' : 'AM';
+      const displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+      arrivalTimeStr = `${displayHour}:${minutes} ${period}`;
+    }
+
+    const message =
+      `🏠 *CHECK-IN REPORTADO*\n\n` +
+      `🔖 Reserva: #${reservation_id}\n` +
+      `📍 Propiedad: *${property_name}*\n` +
+      `🕐 Hora de llegada: ${arrivalTimeStr}\n` +
+      `👥 Huéspedes: ${totalGuests}\n\n` +
+      `Nuevos huéspedes han llegado a la propiedad.`;
+
+    // Send to all housekeeping staff
+    for (const contact of result.rows) {
+      try {
+        await bot.telegram.sendMessage(contact.telegram_id, message, {
+          parse_mode: 'Markdown'
+        });
+      } catch (error) {
+        console.error(`Failed to notify ${contact.telegram_id}:`, error.message);
+      }
+    }
+
+    console.log(`✅ Checkin notification sent to ${result.rows.length} housekeeping staff`);
+  } catch (error) {
+    console.error('Error sending checkin notification:', error);
   }
 }

@@ -462,6 +462,7 @@ router.put('/:id', requireRole('admin', 'supervisor'), asyncHandler(async (req, 
 
     const isCheckoutReported = finalActualCheckoutTime && !currentReservation.actual_checkout_time;
     const isCheckoutCancelled = finalActualCheckoutTime === null && currentReservation.actual_checkout_time;
+    const isCheckinReported = actual_checkin_time && !currentReservation.actual_checkin_time;
 
     // Build update query dynamically to allow setting NULL
     const updates = [];
@@ -597,7 +598,9 @@ router.put('/:id', requireRole('admin', 'supervisor'), asyncHandler(async (req, 
 
       // Send Telegram notification to housekeeping staff
       await notifyCheckout(req.tenantId, {
+        reservation_id: id,
         property_name: currentReservation.property_name,
+        checkout_time: updatedReservation.checkout_time,
         actual_checkout_time,
         adults: updatedReservation.adults,
         children: updatedReservation.children,
@@ -639,6 +642,20 @@ router.put('/:id', requireRole('admin', 'supervisor'), asyncHandler(async (req, 
           );
         }
       }
+    }
+
+    // If checkin was just reported, send notification to housekeeping
+    if (isCheckinReported) {
+      const { notifyCheckin } = await import('../telegram/bot.js');
+      await notifyCheckin(req.tenantId, {
+        reservation_id: id,
+        property_name: currentReservation.property_name,
+        checkin_time: updatedReservation.checkin_time,
+        actual_checkin_time,
+        adults: updatedReservation.adults,
+        children: updatedReservation.children,
+        infants: updatedReservation.infants
+      });
     }
 
     await client.query('COMMIT');

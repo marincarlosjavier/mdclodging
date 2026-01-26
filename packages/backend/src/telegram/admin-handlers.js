@@ -760,7 +760,9 @@ export async function reportCheckout(ctx, reservationId) {
       // Notify housekeeping
       const { notifyCheckout } = await import('./bot.js');
       await notifyCheckout(contact.tenant_id, {
+        reservation_id: reservationId,
         property_name: reservation.property_name,
+        checkout_time: reservation.checkout_time,
         actual_checkout_time: new Date(),
         adults: reservation.adults,
         children: reservation.children,
