@@ -960,10 +960,18 @@ export default function Reservations() {
                 }
 
                 // Normal reservation display
+                // Determine if this reservation is completed based on active filter
+                const isCompleted =
+                  (activeFilter === 'checkins' && reservation.status === 'checked_in') ||
+                  (activeFilter === 'checkouts' && reservation.status === 'checked_out');
+
                 return (
-                  <tr key={reservation.id} className="hover:bg-gray-50">
+                  <tr key={reservation.id} className={isCompleted ? 'bg-gray-50 hover:bg-gray-100' : 'hover:bg-gray-50'}>
                     <td className="px-6 py-4 text-sm font-mono text-gray-700">
-                      #{reservation.id}
+                      <div className="flex items-center gap-2">
+                        {isCompleted && <CheckCircle className="w-4 h-4 text-green-600" />}
+                        <span>#{reservation.id}</span>
+                      </div>
                     </td>
                     <td className="px-6 py-4">
                       <div className="text-sm font-medium text-gray-900">{reservation.property_name}</div>
