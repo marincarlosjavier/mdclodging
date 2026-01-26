@@ -131,7 +131,8 @@ export async function showTasksPending(ctx) {
        AND ct.scheduled_date <= $2
        AND (
          (ct.task_type = 'check_out' AND r.status = 'checked_out')
-         OR (ct.task_type IN ('stay_over', 'deep_cleaning') AND r.status IN ('active', 'checked_in'))
+         OR (ct.task_type = 'stay_over' AND r.status IN ('active', 'checked_in'))
+         OR (ct.task_type = 'deep_cleaning')
        )
      ORDER BY
        ct.is_priority DESC,

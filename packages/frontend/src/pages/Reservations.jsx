@@ -854,7 +854,7 @@ export default function Reservations() {
                       <td className="px-2 py-3 whitespace-nowrap text-xs text-gray-600">
                         {reservation.cleaning_task_type === 'check_out' ? 'Aseo General' :
                          reservation.cleaning_task_type === 'stay_over' ? 'Aseo Liviano' :
-                         reservation.cleaning_task_type === 'deep_clean' ? 'Aseo Profundo' :
+                         reservation.cleaning_task_type === 'deep_cleaning' ? 'Aseo Profundo' :
                          reservation.cleaning_task_type || '-'}
                       </td>
                       <td className="px-2 py-3 whitespace-nowrap">

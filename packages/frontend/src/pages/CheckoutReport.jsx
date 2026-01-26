@@ -524,7 +524,7 @@ export default function CheckoutReport() {
                     <td className="px-2 py-3 whitespace-nowrap text-xs text-gray-600">
                       {checkout.cleaning_task_type === 'check_out' ? 'Aseo General' :
                        checkout.cleaning_task_type === 'stay_over' ? 'Aseo Liviano' :
-                       checkout.cleaning_task_type === 'deep_clean' ? 'Aseo Profundo' :
+                       checkout.cleaning_task_type === 'deep_cleaning' ? 'Aseo Profundo' :
                        checkout.cleaning_task_type || '-'}
                     </td>
                     <td className="px-2 py-3 whitespace-nowrap">

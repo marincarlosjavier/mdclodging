@@ -49,7 +49,7 @@ async function generateCleaningTasks(client, reservation, tenantId, stayOverInte
 
     while (currentDate < checkOutDate) {
       tasks.push({
-        type: 'deep_clean',
+        type: 'deep_cleaning',
         date: new Date(currentDate)
       });
       currentDate.setDate(currentDate.getDate() + deepCleanInterval);
