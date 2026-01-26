@@ -31,14 +31,19 @@ import {
   showMyActiveTasks,
   showDailySummary,
   showTasksTomorrow,
-  showHousekeepingHelp
+  showHousekeepingHelp,
+  navigateTask
 } from './housekeeping-menu.js';
 import {
   takeTask,
   startTask as hkStartTask,
   completeTask as hkCompleteTask,
   showSuppliesMenu,
-  requestSupply
+  requestSupply,
+  startDamageReport,
+  finishDamageReport,
+  cancelDamageReport,
+  handleDamageReportMedia
 } from './housekeeping-actions.js';
 
 let bot = null;
@@ -207,6 +212,10 @@ export async function startTelegramBot() {
 
   // Photo handlers
   bot.on('photo', handlePhoto);
+
+  // Voice/audio handlers
+  bot.on('voice', handleVoice);
+  bot.on('audio', handleAudio);
 
   // Error handling
   bot.catch((err, ctx) => {
@@ -384,6 +393,11 @@ async function handleText(ctx) {
   // State: awaiting rejection reason (admin rejecting settlement)
   if (session.rejectingSettlement) {
     return handleRejectReason(ctx, text, session.rejectingSettlement);
+  }
+
+  // State: reporting damage
+  if (session.state === 'reporting_damage') {
+    return handleDamageReportMedia(ctx, 'text', text);
   }
 
   // Default
@@ -642,6 +656,26 @@ async function handleCallback(ctx) {
   } else if (action.startsWith('hk_supply_')) {
     const supplyCode = action.replace('hk_supply_', '');
     return await requestSupply(ctx, supplyCode);
+  }
+
+  // Housekeeping task navigation
+  if (action.startsWith('hk_task_prev_')) {
+    const context = action.replace('hk_task_prev_', '');
+    return await navigateTask(ctx, 'prev', context);
+  } else if (action.startsWith('hk_task_next_')) {
+    const context = action.replace('hk_task_next_', '');
+    return await navigateTask(ctx, 'next', context);
+  }
+
+  // Housekeeping damage reports
+  if (action.startsWith('hk_damage_')) {
+    const taskId = action.split('_')[2];
+    return await startDamageReport(ctx, taskId);
+  } else if (action.startsWith('hk_finish_damage_')) {
+    const taskId = action.split('_')[3];
+    return await finishDamageReport(ctx, taskId);
+  } else if (action === 'hk_cancel_damage') {
+    return await cancelDamageReport(ctx);
   }
 
   // Old cleaning tasks callbacks (don't answer query yet, handlers will do it)
@@ -1153,7 +1187,49 @@ async function handleCancel(ctx) {
 }
 
 async function handlePhoto(ctx) {
-  ctx.reply('📸 Función de fotos en desarrollo...');
+  const session = ctx.session;
+
+  // Check if reporting damage
+  if (session && session.state === 'reporting_damage') {
+    const photos = ctx.message.photo;
+    const largestPhoto = photos[photos.length - 1]; // Get highest resolution
+    return handleDamageReportMedia(ctx, 'photo', {
+      file_id: largestPhoto.file_id,
+      file_unique_id: largestPhoto.file_unique_id
+    });
+  }
+
+  ctx.reply('📸 Para reportar daños con fotos, ve a la tarea y presiona "Reportar Daños"');
+}
+
+async function handleVoice(ctx) {
+  const session = ctx.session;
+
+  // Check if reporting damage
+  if (session && session.state === 'reporting_damage') {
+    return handleDamageReportMedia(ctx, 'voice', {
+      file_id: ctx.message.voice.file_id,
+      file_unique_id: ctx.message.voice.file_unique_id,
+      duration: ctx.message.voice.duration
+    });
+  }
+
+  ctx.reply('🎤 Para reportar daños con audio, ve a la tarea y presiona "Reportar Daños"');
+}
+
+async function handleAudio(ctx) {
+  const session = ctx.session;
+
+  // Check if reporting damage
+  if (session && session.state === 'reporting_damage') {
+    return handleDamageReportMedia(ctx, 'audio', {
+      file_id: ctx.message.audio.file_id,
+      file_unique_id: ctx.message.audio.file_unique_id,
+      duration: ctx.message.audio.duration
+    });
+  }
+
+  ctx.reply('🎤 Para reportar daños con audio, ve a la tarea y presiona "Reportar Daños"');
 }
 
 async function showMySummary(ctx) {

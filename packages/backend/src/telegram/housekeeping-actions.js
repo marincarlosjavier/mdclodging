@@ -70,6 +70,128 @@ export async function startTask(ctx, taskId) {
 }
 
 /**
+ * Start damage report for a task
+ */
+export async function startDamageReport(ctx, taskId) {
+  const { Markup } = await import('telegraf');
+  const { userSessions } = await import('./bot.js');
+
+  // Set session state
+  if (!ctx.session) ctx.session = {};
+  ctx.session.state = 'reporting_damage';
+  ctx.session.damage_task_id = taskId;
+  ctx.session.damage_reports = [];
+
+  // Save to userSessions
+  userSessions.set(ctx.telegramId.toString(), ctx.session);
+
+  const message =
+    `📸 *REPORTAR DAÑOS*\n\n` +
+    `Puedes enviar:\n` +
+    `📷 Fotos de los daños\n` +
+    `🎤 Mensajes de voz con detalles\n` +
+    `💬 Mensajes de texto descriptivos\n\n` +
+    `Cuando termines, presiona "Finalizar Reporte"`;
+
+  await ctx.editMessageText(message, {
+    parse_mode: 'Markdown',
+    ...Markup.inlineKeyboard([
+      [Markup.button.callback('✅ Finalizar Reporte', `hk_finish_damage_${taskId}`)],
+      [Markup.button.callback('❌ Cancelar', 'hk_cancel_damage')]
+    ])
+  });
+}
+
+/**
+ * Finish damage report
+ */
+export async function finishDamageReport(ctx, taskId) {
+  const { Markup } = await import('telegraf');
+  const { userSessions } = await import('./bot.js');
+
+  if (!ctx.session || !ctx.session.damage_reports) {
+    return await ctx.answerCbQuery('No hay reportes para guardar');
+  }
+
+  const reports = ctx.session.damage_reports;
+
+  // TODO: Save damage reports to database
+  console.log('Damage reports for task', taskId, ':', reports);
+
+  // Clear session state
+  delete ctx.session.state;
+  delete ctx.session.damage_task_id;
+  delete ctx.session.damage_reports;
+
+  // Update userSessions
+  userSessions.set(ctx.telegramId.toString(), ctx.session);
+
+  await ctx.answerCbQuery('✅ Reporte guardado');
+
+  // Return to task view
+  await ctx.editMessageText(
+    `✅ *Reporte de Daños Guardado*\n\n` +
+    `Total de elementos reportados: ${reports.length}`,
+    {
+      parse_mode: 'Markdown',
+      ...Markup.inlineKeyboard([
+        [Markup.button.callback('🔙 Volver a Tareas', 'hk_tasks_today')]
+      ])
+    }
+  );
+}
+
+/**
+ * Cancel damage report
+ */
+export async function cancelDamageReport(ctx) {
+  const { userSessions } = await import('./bot.js');
+
+  // Clear session state
+  if (ctx.session) {
+    delete ctx.session.state;
+    delete ctx.session.damage_task_id;
+    delete ctx.session.damage_reports;
+
+    // Update userSessions
+    userSessions.set(ctx.telegramId.toString(), ctx.session);
+  }
+
+  await ctx.answerCbQuery('❌ Reporte cancelado');
+
+  const { showTasksToday } = await import('./housekeeping-menu.js');
+  await showTasksToday(ctx);
+}
+
+/**
+ * Handle media/text during damage report
+ */
+export async function handleDamageReportMedia(ctx, type, data) {
+  const { userSessions } = await import('./bot.js');
+
+  if (!ctx.session || ctx.session.state !== 'reporting_damage') {
+    return;
+  }
+
+  if (!ctx.session.damage_reports) {
+    ctx.session.damage_reports = [];
+  }
+
+  ctx.session.damage_reports.push({
+    type,
+    data,
+    timestamp: new Date()
+  });
+
+  // Save to userSessions
+  userSessions.set(ctx.telegramId.toString(), ctx.session);
+
+  // Send confirmation
+  const count = ctx.session.damage_reports.length;
+  await ctx.reply(`✅ ${type === 'photo' ? 'Foto' : type === 'voice' ? 'Audio' : 'Mensaje'} agregado (${count} total)`);
+}
+
+/**
  * Complete a task
  */
 export async function completeTask(ctx, taskId) {

@@ -4,6 +4,41 @@ import { pool } from '../config/database.js';
 /**
  * Show main housekeeping menu
  */
+/**
+ * Navigate to previous/next task
+ */
+export async function navigateTask(ctx, direction, context) {
+  const { userSessions } = await import('./bot.js');
+
+  if (!ctx.session) ctx.session = {};
+
+  const tasksKey = context === 'today' ? 'tasks_today' : 'tasks_active';
+  const tasks = ctx.session[tasksKey];
+
+  if (!tasks || tasks.length === 0) {
+    return await ctx.answerCbQuery('No hay tareas disponibles');
+  }
+
+  let currentIndex = ctx.session.current_task_index || 0;
+
+  if (direction === 'next') {
+    currentIndex = Math.min(currentIndex + 1, tasks.length - 1);
+  } else if (direction === 'prev') {
+    currentIndex = Math.max(currentIndex - 1, 0);
+  }
+
+  ctx.session.current_task_index = currentIndex;
+
+  // Save to userSessions
+  userSessions.set(ctx.telegramId.toString(), ctx.session);
+
+  if (context === 'today') {
+    await showTaskDetail(ctx, tasks, currentIndex, 'today');
+  } else {
+    await showActiveTaskDetail(ctx, tasks, currentIndex);
+  }
+}
+
 export async function showHousekeepingMenu(ctx) {
   const contact = ctx.contact;
 
@@ -116,67 +151,98 @@ export async function showTasksToday(ctx) {
     return;
   }
 
-  let message = `📋 *TAREAS DE HOY* (${rows.length})\n\n`;
+  // Store tasks in session for pagination
+  const { userSessions } = await import('./bot.js');
+
+  if (!ctx.session) ctx.session = {};
+  ctx.session.tasks_today = rows;
+  ctx.session.current_task_index = 0;
+
+  // Save to userSessions
+  userSessions.set(ctx.telegramId.toString(), ctx.session);
+
+  // Show first task
+  await showTaskDetail(ctx, rows, 0, 'today');
+}
+
+/**
+ * Show individual task detail with pagination
+ */
+async function showTaskDetail(ctx, tasks, index, context = 'today') {
+  const contact = ctx.contact;
+  const task = tasks[index];
+  const totalTasks = tasks.length;
+
+  // Check if checkout has been reported
+  const hasCheckout = task.actual_checkout_time !== null;
+  const taskTypeEmoji = getTaskTypeEmoji(task.task_type);
+  const taskTypeName = getTaskTypeName(task.task_type);
+  const priorityFlag = task.is_priority ? '🔴 PRIORIDAD\n' : '';
+  const time = task.actual_checkout_time || task.checkout_time || '';
+  const timeStr = time ? formatTime(time) : '';
+  const totalGuests = (task.adults || 0) + (task.children || 0) + (task.infants || 0);
+
+  let message = `📋 *TAREA ${index + 1}/${totalTasks}*\n\n`;
 
   const buttons = [];
 
-  rows.forEach((task, index) => {
-    // Check if checkout has been reported
-    const hasCheckout = task.actual_checkout_time !== null;
-    const taskTypeEmoji = getTaskTypeEmoji(task.task_type);
-    const taskTypeName = getTaskTypeName(task.task_type);
-    const priorityFlag = task.is_priority ? '🔴 PRIORIDAD - ' : '';
-    const time = task.actual_checkout_time || task.checkout_time || '';
-    const timeStr = time ? formatTime(time) : '';
-    const totalGuests = (task.adults || 0) + (task.children || 0) + (task.infants || 0);
-
-    // Determine status and action button
+  if (!hasCheckout) {
+    // Waiting for checkout
+    const checkoutTimeStr = task.checkout_time ? formatTime(task.checkout_time) : '';
+    message += `${priorityFlag}*${task.property_name}*\n\n`;
+    message += `👥 Huéspedes: ${totalGuests}\n`;
+    if (checkoutTimeStr) message += `🕐 Salida esperada: ${checkoutTimeStr}\n`;
+    message += `\n⏳ *Esperando Check out*`;
+  } else {
+    // Has checkout - show full task details
     let statusText = '';
     let actionButton = null;
 
-    if (!hasCheckout) {
-      // Waiting for checkout - no action button
-      statusText = '⏳ Esperando Check out';
-      const checkoutTimeStr = task.checkout_time ? formatTime(task.checkout_time) : '';
-      message += `*${task.property_name}*\n`;
-      message += `👥 Huéspedes: ${totalGuests}`;
-      if (checkoutTimeStr) message += ` | Salida: ${checkoutTimeStr}`;
-      message += `\n${statusText}\n`;
-      // No action button for waiting checkout
+    if (task.status === 'in_progress' && task.assigned_to === contact.user_id) {
+      statusText = '⚙️ EN PROGRESO';
+      actionButton = Markup.button.callback('✅ Completar Tarea', `hk_complete_${task.cleaning_task_id}`);
+    } else if (task.status === 'in_progress') {
+      statusText = `⚙️ En progreso - ${task.assigned_to_name}`;
+    } else if (task.assigned_to === contact.user_id) {
+      statusText = '📌 Asignada a mí';
+      actionButton = Markup.button.callback('▶️ Iniciar Tarea', `hk_start_${task.cleaning_task_id}`);
+    } else if (task.assigned_to) {
+      statusText = `👤 Asignada - ${task.assigned_to_name}`;
     } else {
-      // Has checkout - show task status and action button
-      if (task.status === 'in_progress' && task.assigned_to === contact.user_id) {
-        statusText = '⚙️ EN PROGRESO';
-        actionButton = Markup.button.callback(`✅ Completar - ${task.property_name}`, `hk_complete_${task.cleaning_task_id}`);
-      } else if (task.status === 'in_progress') {
-        statusText = `⚙️ En progreso - ${task.assigned_to_name}`;
-      } else if (task.assigned_to === contact.user_id) {
-        statusText = '📌 Asignada a mí';
-        actionButton = Markup.button.callback(`▶️ Iniciar - ${task.property_name}`, `hk_start_${task.cleaning_task_id}`);
-      } else if (task.assigned_to) {
-        statusText = `👤 Asignada - ${task.assigned_to_name}`;
-      } else {
-        statusText = '🆓 Disponible';
-        actionButton = Markup.button.callback(`✋ Tomar - ${task.property_name}`, `hk_take_${task.cleaning_task_id}`);
-      }
-
-      message += `${priorityFlag}*${task.property_name}*\n`;
-      message += `${taskTypeEmoji} ${taskTypeName}`;
-      if (timeStr) message += ` | ${timeStr}`;
-      message += `\n👥 Huéspedes: ${totalGuests}\n`;
-      message += `${statusText}\n`;
-
-      // Add action button immediately after this task
-      if (actionButton) {
-        buttons.push([actionButton]);
-      }
+      statusText = '🆓 Disponible';
+      actionButton = Markup.button.callback('✋ Tomar Tarea', `hk_take_${task.cleaning_task_id}`);
     }
 
-    if (index < rows.length - 1) {
-      message += '\n';
-    }
-  });
+    message += `${priorityFlag}*${task.property_name}*\n\n`;
+    message += `${taskTypeEmoji} *${taskTypeName}*\n`;
+    message += `🕐 ${timeStr}\n`;
+    message += `👥 Huéspedes: ${totalGuests}\n`;
+    message += `\n📊 Estado: ${statusText}`;
 
+    // Add main action button
+    if (actionButton) {
+      buttons.push([actionButton]);
+    }
+
+    // Add report damage button if task is assigned to user
+    if (task.assigned_to === contact.user_id) {
+      buttons.push([Markup.button.callback('📸 Reportar Daños', `hk_damage_${task.cleaning_task_id || task.reservation_id}`)]);
+    }
+  }
+
+  // Navigation buttons
+  const navButtons = [];
+  if (index > 0) {
+    navButtons.push(Markup.button.callback('◀️ Anterior', `hk_task_prev_${context}`));
+  }
+  if (index < totalTasks - 1) {
+    navButtons.push(Markup.button.callback('Siguiente ▶️', `hk_task_next_${context}`));
+  }
+  if (navButtons.length > 0) {
+    buttons.push(navButtons);
+  }
+
+  // Back button
   buttons.push([Markup.button.callback('🔙 Volver al Menú', 'hk_menu')]);
 
   await ctx.editMessageText(message, {
@@ -230,38 +296,69 @@ export async function showMyActiveTasks(ctx) {
     return;
   }
 
-  let message = `📋 *MIS TAREAS ACTIVAS* (${rows.length})\n\n`;
+  // Store tasks in session for pagination
+  const { userSessions } = await import('./bot.js');
+
+  if (!ctx.session) ctx.session = {};
+  ctx.session.tasks_active = rows;
+  ctx.session.current_task_index = 0;
+
+  // Save to userSessions
+  userSessions.set(ctx.telegramId.toString(), ctx.session);
+
+  // Show first task
+  await showActiveTaskDetail(ctx, rows, 0);
+}
+
+/**
+ * Show individual active task detail with pagination
+ */
+async function showActiveTaskDetail(ctx, tasks, index) {
+  const contact = ctx.contact;
+  const task = tasks[index];
+  const totalTasks = tasks.length;
+
+  const taskTypeEmoji = getTaskTypeEmoji(task.task_type);
+  const taskTypeName = getTaskTypeName(task.task_type);
+  const priorityFlag = task.is_priority ? '🔴 PRIORIDAD\n' : '';
+  const time = task.actual_checkout_time || task.checkout_time || '';
+  const timeStr = time ? formatTime(time) : '';
+  const totalGuests = (task.adults || 0) + (task.children || 0) + (task.infants || 0);
+
+  const statusText = task.status === 'in_progress' ? '⚙️ EN PROGRESO' : '📌 PENDIENTE';
+
+  let message = `📋 *MI TAREA ${index + 1}/${totalTasks}*\n\n`;
+  message += `${priorityFlag}*${task.property_name}*\n\n`;
+  message += `${taskTypeEmoji} *${taskTypeName}*\n`;
+  message += `🕐 ${timeStr}\n`;
+  message += `👥 Huéspedes: ${totalGuests}\n`;
+  message += `\n📊 Estado: ${statusText}`;
 
   const buttons = [];
 
-  rows.forEach((task, index) => {
-    const taskTypeEmoji = getTaskTypeEmoji(task.task_type);
-    const taskTypeName = getTaskTypeName(task.task_type);
-    const priorityFlag = task.is_priority ? '🔴 PRIORIDAD - ' : '';
-    const time = task.actual_checkout_time || task.checkout_time || '';
-    const timeStr = time ? formatTime(time) : '';
-    const totalGuests = (task.adults || 0) + (task.children || 0) + (task.infants || 0);
+  // Add action button
+  if (task.status === 'pending') {
+    buttons.push([Markup.button.callback('▶️ Iniciar Tarea', `hk_start_${task.id}`)]);
+  } else if (task.status === 'in_progress') {
+    buttons.push([Markup.button.callback('✅ Completar Tarea', `hk_complete_${task.id}`)]);
+  }
 
-    const statusText = task.status === 'in_progress' ? '⚙️ EN PROGRESO' : '📌 PENDIENTE';
+  // Add report damage button (always available for my tasks)
+  buttons.push([Markup.button.callback('📸 Reportar Daños', `hk_damage_${task.id}`)]);
 
-    message += `${priorityFlag}*${task.property_name}*\n`;
-    message += `${taskTypeEmoji} ${taskTypeName}`;
-    if (timeStr) message += ` | ${timeStr}`;
-    message += `\n👥 Huéspedes: ${totalGuests}\n`;
-    message += `${statusText}\n`;
+  // Navigation buttons
+  const navButtons = [];
+  if (index > 0) {
+    navButtons.push(Markup.button.callback('◀️ Anterior', 'hk_task_prev_active'));
+  }
+  if (index < totalTasks - 1) {
+    navButtons.push(Markup.button.callback('Siguiente ▶️', 'hk_task_next_active'));
+  }
+  if (navButtons.length > 0) {
+    buttons.push(navButtons);
+  }
 
-    // Add action button immediately after this task
-    if (task.status === 'pending') {
-      buttons.push([Markup.button.callback(`▶️ Iniciar - ${task.property_name}`, `hk_start_${task.id}`)]);
-    } else if (task.status === 'in_progress') {
-      buttons.push([Markup.button.callback(`✅ Completar - ${task.property_name}`, `hk_complete_${task.id}`)]);
-    }
-
-    if (index < rows.length - 1) {
-      message += '\n';
-    }
-  });
-
+  // Back button
   buttons.push([Markup.button.callback('🔙 Volver al Menú', 'hk_menu')]);
 
   await ctx.editMessageText(message, {
