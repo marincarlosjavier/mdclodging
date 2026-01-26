@@ -65,10 +65,13 @@ export async function showHousekeepingMenu(ctx) {
     ],
     [
       Markup.button.callback('📅 Tareas de mañana', 'hk_tasks_tomorrow'),
-      Markup.button.callback('🧴 Ordenar Insumos', 'hk_order_supplies')
+      Markup.button.callback('🏠 Llegadas', 'hk_arrivals')
     ],
     [
-      Markup.button.callback('❓ Ayuda', 'hk_help'),
+      Markup.button.callback('🧴 Ordenar Insumos', 'hk_order_supplies'),
+      Markup.button.callback('❓ Ayuda', 'hk_help')
+    ],
+    [
       Markup.button.callback('🚪 Salir', 'logout')
     ]
   ];
@@ -557,4 +560,146 @@ function formatTime(timeString) {
   }
 
   return timeString;
+}
+
+/**
+ * Show arrivals (check-ins) for today
+ */
+export async function showArrivals(ctx) {
+  const contact = ctx.contact;
+
+  try {
+    const now = new Date();
+    const today = now.toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
+
+    const { rows } = await pool.query(
+      `SELECT r.id as reservation_id, r.checkin_time, r.check_in_date,
+              r.adults, r.children, r.infants,
+              p.name as property_name, pt.name as property_type_name,
+              r.reference
+       FROM reservations r
+       JOIN properties p ON p.id = r.property_id
+       JOIN property_types pt ON p.property_type_id = pt.id
+       WHERE r.tenant_id = $1
+         AND r.check_in_date = $2
+         AND r.status IN ('active', 'checked_in')
+       ORDER BY COALESCE(r.checkin_time, '15:00') ASC, p.name`,
+      [contact.tenant_id, today]
+    );
+
+    if (rows.length === 0) {
+      const message = `🏠 *LLEGADAS DE HOY*\n\n` +
+        `No hay check-ins programados para hoy.`;
+
+      const keyboard = Markup.inlineKeyboard([
+        [Markup.button.callback('📅 Ver mañana', 'hk_arrivals_tomorrow')],
+        [Markup.button.callback('◀️ Volver al menú', 'module_housekeeping')]
+      ]);
+
+      return await ctx.editMessageText(message, { parse_mode: 'Markdown', ...keyboard });
+    }
+
+    let message = `🏠 *LLEGADAS DE HOY*\n\n`;
+    message += `📊 Total: ${rows.length} ${rows.length === 1 ? 'llegada' : 'llegadas'}\n\n`;
+
+    rows.forEach((arrival, index) => {
+      const timeStr = arrival.checkin_time ? formatTime(arrival.checkin_time) : 'Por definir';
+      const totalGuests = (arrival.adults || 0) + (arrival.children || 0) + (arrival.infants || 0);
+      const statusIcon = arrival.status === 'checked_in' ? '✅' : '⏳';
+
+      message += `${statusIcon} *${arrival.property_name}*\n`;
+      message += `🔖 Reserva #${arrival.reservation_id}\n`;
+      message += `🕐 Hora: ${timeStr}\n`;
+      message += `👥 Huéspedes: ${totalGuests}\n`;
+      if (arrival.reference) {
+        message += `📝 Ref: ${arrival.reference}\n`;
+      }
+
+      if (index < rows.length - 1) {
+        message += '\n';
+      }
+    });
+
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('📅 Ver mañana', 'hk_arrivals_tomorrow')],
+      [Markup.button.callback('◀️ Volver al menú', 'module_housekeeping')]
+    ]);
+
+    await ctx.editMessageText(message, { parse_mode: 'Markdown', ...keyboard });
+  } catch (error) {
+    console.error('Error showing arrivals:', error);
+    await ctx.reply('❌ Error al cargar las llegadas');
+  }
+}
+
+/**
+ * Show arrivals (check-ins) for tomorrow
+ */
+export async function showArrivalsTomorrow(ctx) {
+  const contact = ctx.contact;
+
+  try {
+    const now = new Date();
+    const today = now.toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
+    const [year, month, day] = today.split('-').map(Number);
+    const tomorrow = new Date(year, month - 1, day + 1);
+    const tomorrowDate = tomorrow.toISOString().split('T')[0];
+
+    const { rows } = await pool.query(
+      `SELECT r.id as reservation_id, r.checkin_time, r.check_in_date,
+              r.adults, r.children, r.infants,
+              p.name as property_name, pt.name as property_type_name,
+              r.reference
+       FROM reservations r
+       JOIN properties p ON p.id = r.property_id
+       JOIN property_types pt ON p.property_type_id = pt.id
+       WHERE r.tenant_id = $1
+         AND r.check_in_date = $2
+         AND r.status IN ('active', 'checked_in')
+       ORDER BY COALESCE(r.checkin_time, '15:00') ASC, p.name`,
+      [contact.tenant_id, tomorrowDate]
+    );
+
+    if (rows.length === 0) {
+      const message = `🏠 *LLEGADAS DE MAÑANA*\n\n` +
+        `No hay check-ins programados para mañana.`;
+
+      const keyboard = Markup.inlineKeyboard([
+        [Markup.button.callback('◀️ Ver hoy', 'hk_arrivals')],
+        [Markup.button.callback('🏠 Volver al menú', 'module_housekeeping')]
+      ]);
+
+      return await ctx.editMessageText(message, { parse_mode: 'Markdown', ...keyboard });
+    }
+
+    let message = `🏠 *LLEGADAS DE MAÑANA*\n\n`;
+    message += `📊 Total: ${rows.length} ${rows.length === 1 ? 'llegada' : 'llegadas'}\n\n`;
+
+    rows.forEach((arrival, index) => {
+      const timeStr = arrival.checkin_time ? formatTime(arrival.checkin_time) : 'Por definir';
+      const totalGuests = (arrival.adults || 0) + (arrival.children || 0) + (arrival.infants || 0);
+
+      message += `*${arrival.property_name}*\n`;
+      message += `🔖 Reserva #${arrival.reservation_id}\n`;
+      message += `🕐 Hora: ${timeStr}\n`;
+      message += `👥 Huéspedes: ${totalGuests}\n`;
+      if (arrival.reference) {
+        message += `📝 Ref: ${arrival.reference}\n`;
+      }
+
+      if (index < rows.length - 1) {
+        message += '\n';
+      }
+    });
+
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('◀️ Ver hoy', 'hk_arrivals')],
+      [Markup.button.callback('🏠 Volver al menú', 'module_housekeeping')]
+    ]);
+
+    await ctx.editMessageText(message, { parse_mode: 'Markdown', ...keyboard });
+  } catch (error) {
+    console.error('Error showing arrivals tomorrow:', error);
+    await ctx.reply('❌ Error al cargar las llegadas de mañana');
+  }
 }

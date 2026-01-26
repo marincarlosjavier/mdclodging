@@ -32,7 +32,9 @@ import {
   showDailySummary,
   showTasksTomorrow,
   showHousekeepingHelp,
-  navigateTask
+  navigateTask,
+  showArrivals,
+  showArrivalsTomorrow
 } from './housekeeping-menu.js';
 import {
   takeTask,
@@ -637,6 +639,10 @@ async function handleCallback(ctx) {
     return await showSettlementStatus(ctx);
   } else if (action === 'hk_tasks_tomorrow') {
     return await showTasksTomorrow(ctx);
+  } else if (action === 'hk_arrivals') {
+    return await showArrivals(ctx);
+  } else if (action === 'hk_arrivals_tomorrow') {
+    return await showArrivalsTomorrow(ctx);
   } else if (action === 'hk_order_supplies') {
     return await showSuppliesMenu(ctx);
   } else if (action === 'hk_help') {
