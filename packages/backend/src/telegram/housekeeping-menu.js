@@ -129,6 +129,7 @@ export async function showTasksPending(ctx) {
        AND ct.status = 'pending'
        AND ct.assigned_to IS NULL
        AND ct.scheduled_date <= $2
+       AND r.status IN ('active', 'checked_in')
      ORDER BY
        ct.is_priority DESC,
        ct.scheduled_date ASC,
