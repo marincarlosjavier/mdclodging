@@ -66,28 +66,38 @@ export async function showTasksToday(ctx) {
 
   const { rows } = await pool.query(
     `SELECT
-      ct.id,
+      r.id as reservation_id,
+      r.actual_checkout_time,
+      r.checkout_time,
+      r.adults,
+      r.children,
+      r.infants,
+      p.name as property_name,
+      ct.id as cleaning_task_id,
       ct.task_type,
       ct.status,
       ct.assigned_to,
       ct.assigned_at,
       ct.started_at,
       ct.is_priority,
-      r.actual_checkout_time,
-      r.checkout_time,
-      p.name as property_name,
       u.full_name as assigned_to_name
-     FROM cleaning_tasks ct
-     JOIN reservations r ON r.id = ct.reservation_id
+     FROM reservations r
      JOIN properties p ON p.id = r.property_id
+     LEFT JOIN cleaning_tasks ct ON ct.reservation_id = r.id AND ct.task_type = 'check_out'
      LEFT JOIN users u ON u.id = ct.assigned_to
-     WHERE ct.tenant_id = $1
-       AND ct.scheduled_date = $2
-       AND ct.status IN ('pending', 'in_progress')
+     WHERE r.tenant_id = $1
+       AND r.check_out_date = $2
+       AND r.status IN ('active', 'checked_in', 'checked_out')
+       AND (
+         (r.actual_checkout_time IS NULL)
+         OR (ct.id IS NOT NULL AND ct.status IN ('pending', 'in_progress'))
+       )
      ORDER BY
-       ct.is_priority DESC,
-       ct.status ASC,
-       r.actual_checkout_time ASC NULLS LAST`,
+       CASE WHEN r.actual_checkout_time IS NULL THEN 0 ELSE 1 END,
+       COALESCE(ct.is_priority, false) DESC,
+       COALESCE(ct.status, 'pending') ASC,
+       r.actual_checkout_time ASC NULLS LAST,
+       COALESCE(r.checkout_time, '12:00')`,
     [contact.tenant_id, today]
   );
 
@@ -108,39 +118,55 @@ export async function showTasksToday(ctx) {
   const buttons = [];
 
   rows.forEach((task, index) => {
+    // Check if checkout has been reported
+    const hasCheckout = task.actual_checkout_time !== null;
     const taskTypeEmoji = getTaskTypeEmoji(task.task_type);
     const taskTypeName = getTaskTypeName(task.task_type);
     const priorityFlag = task.is_priority ? '🔴 PRIORIDAD - ' : '';
     const time = task.actual_checkout_time || task.checkout_time || '';
     const timeStr = time ? formatTime(time) : '';
+    const totalGuests = (task.adults || 0) + (task.children || 0) + (task.infants || 0);
 
     // Determine status and action button
     let statusText = '';
     let actionButton = null;
 
-    if (task.status === 'in_progress' && task.assigned_to === contact.user_id) {
-      statusText = '⚙️ EN PROGRESO';
-      actionButton = Markup.button.callback(`✅ Completar - ${task.property_name}`, `hk_complete_${task.id}`);
-    } else if (task.status === 'in_progress') {
-      statusText = `⚙️ En progreso - ${task.assigned_to_name}`;
-    } else if (task.assigned_to === contact.user_id) {
-      statusText = '📌 Asignada a mí';
-      actionButton = Markup.button.callback(`▶️ Iniciar - ${task.property_name}`, `hk_start_${task.id}`);
-    } else if (task.assigned_to) {
-      statusText = `👤 Asignada - ${task.assigned_to_name}`;
+    if (!hasCheckout) {
+      // Waiting for checkout - no action button
+      statusText = '⏳ Esperando Check out';
+      const checkoutTimeStr = task.checkout_time ? formatTime(task.checkout_time) : '';
+      message += `*${task.property_name}*\n`;
+      message += `👥 Huéspedes: ${totalGuests}`;
+      if (checkoutTimeStr) message += ` | Salida: ${checkoutTimeStr}`;
+      message += `\n${statusText}\n`;
+      // No action button for waiting checkout
     } else {
-      statusText = '🆓 Disponible';
-      actionButton = Markup.button.callback(`✋ Tomar - ${task.property_name}`, `hk_take_${task.id}`);
-    }
+      // Has checkout - show task status and action button
+      if (task.status === 'in_progress' && task.assigned_to === contact.user_id) {
+        statusText = '⚙️ EN PROGRESO';
+        actionButton = Markup.button.callback(`✅ Completar - ${task.property_name}`, `hk_complete_${task.cleaning_task_id}`);
+      } else if (task.status === 'in_progress') {
+        statusText = `⚙️ En progreso - ${task.assigned_to_name}`;
+      } else if (task.assigned_to === contact.user_id) {
+        statusText = '📌 Asignada a mí';
+        actionButton = Markup.button.callback(`▶️ Iniciar - ${task.property_name}`, `hk_start_${task.cleaning_task_id}`);
+      } else if (task.assigned_to) {
+        statusText = `👤 Asignada - ${task.assigned_to_name}`;
+      } else {
+        statusText = '🆓 Disponible';
+        actionButton = Markup.button.callback(`✋ Tomar - ${task.property_name}`, `hk_take_${task.cleaning_task_id}`);
+      }
 
-    message += `${priorityFlag}*${task.property_name}*\n`;
-    message += `${taskTypeEmoji} ${taskTypeName}`;
-    if (timeStr) message += ` | ${timeStr}`;
-    message += `\n${statusText}\n`;
+      message += `${priorityFlag}*${task.property_name}*\n`;
+      message += `${taskTypeEmoji} ${taskTypeName}`;
+      if (timeStr) message += ` | ${timeStr}`;
+      message += `\n👥 Huéspedes: ${totalGuests}\n`;
+      message += `${statusText}\n`;
 
-    // Add action button immediately after this task
-    if (actionButton) {
-      buttons.push([actionButton]);
+      // Add action button immediately after this task
+      if (actionButton) {
+        buttons.push([actionButton]);
+      }
     }
 
     if (index < rows.length - 1) {
@@ -172,6 +198,9 @@ export async function showMyActiveTasks(ctx) {
       ct.scheduled_date,
       r.actual_checkout_time,
       r.checkout_time,
+      r.adults,
+      r.children,
+      r.infants,
       p.name as property_name
      FROM cleaning_tasks ct
      JOIN reservations r ON r.id = ct.reservation_id
@@ -208,13 +237,15 @@ export async function showMyActiveTasks(ctx) {
     const priorityFlag = task.is_priority ? '🔴 PRIORIDAD - ' : '';
     const time = task.actual_checkout_time || task.checkout_time || '';
     const timeStr = time ? formatTime(time) : '';
+    const totalGuests = (task.adults || 0) + (task.children || 0) + (task.infants || 0);
 
     const statusText = task.status === 'in_progress' ? '⚙️ EN PROGRESO' : '📌 PENDIENTE';
 
     message += `${priorityFlag}*${task.property_name}*\n`;
     message += `${taskTypeEmoji} ${taskTypeName}`;
     if (timeStr) message += ` | ${timeStr}`;
-    message += `\n${statusText}\n`;
+    message += `\n👥 Huéspedes: ${totalGuests}\n`;
+    message += `${statusText}\n`;
 
     // Add action button immediately after this task
     if (task.status === 'pending') {
