@@ -1317,10 +1317,26 @@ export async function notifyCheckout(tenantId, reservationData) {
 
     const { reservation_id, property_name, checkout_time, actual_checkout_time, adults, children, infants, is_priority } = reservationData;
     const totalGuests = (adults || 0) + (children || 0) + (infants || 0);
-    const actualTimeStr = new Date(actual_checkout_time).toLocaleTimeString('es-CO', {
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+
+    // Format actual checkout time
+    let actualTimeStr = '';
+    if (actual_checkout_time) {
+      // actual_checkout_time can be TIME (HH:MM:SS) or TIMESTAMP
+      if (typeof actual_checkout_time === 'string' && /^\d{2}:\d{2}/.test(actual_checkout_time)) {
+        // It's in HH:MM:SS format
+        const [hours, minutes] = actual_checkout_time.split(':');
+        const hour = parseInt(hours);
+        const period = hour >= 12 ? 'PM' : 'AM';
+        const displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+        actualTimeStr = `${displayHour}:${minutes} ${period}`;
+      } else {
+        // It's a timestamp
+        actualTimeStr = new Date(actual_checkout_time).toLocaleTimeString('es-CO', {
+          hour: '2-digit',
+          minute: '2-digit'
+        });
+      }
+    }
 
     // Format scheduled checkout time
     let scheduledTimeStr = '';
@@ -1347,16 +1363,11 @@ export async function notifyCheckout(tenantId, reservationData) {
       `La propiedad está disponible para limpieza.` +
       priorityFooter;
 
-    const keyboard = Markup.inlineKeyboard([
-      [Markup.button.callback('📋 Ver Tareas Pendientes', 'hk_tasks_pending')]
-    ]);
-
-    // Send to all housekeeping staff
+    // Send to all housekeeping staff (without keyboard so it appears above menu)
     for (const contact of result.rows) {
       try {
         await bot.telegram.sendMessage(contact.telegram_id, message, {
-          parse_mode: 'Markdown',
-          ...keyboard
+          parse_mode: 'Markdown'
         });
       } catch (error) {
         console.error(`Failed to notify ${contact.telegram_id}:`, error.message);
@@ -1401,10 +1412,21 @@ export async function notifyCheckin(tenantId, reservationData) {
     // Format arrival time
     let arrivalTimeStr = '';
     if (actual_checkin_time) {
-      arrivalTimeStr = new Date(actual_checkin_time).toLocaleTimeString('es-CO', {
-        hour: '2-digit',
-        minute: '2-digit'
-      });
+      // actual_checkin_time can be TIME (HH:MM:SS) or TIMESTAMP
+      if (typeof actual_checkin_time === 'string' && /^\d{2}:\d{2}/.test(actual_checkin_time)) {
+        // It's in HH:MM:SS format
+        const [hours, minutes] = actual_checkin_time.split(':');
+        const hour = parseInt(hours);
+        const period = hour >= 12 ? 'PM' : 'AM';
+        const displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+        arrivalTimeStr = `${displayHour}:${minutes} ${period}`;
+      } else {
+        // It's a timestamp
+        arrivalTimeStr = new Date(actual_checkin_time).toLocaleTimeString('es-CO', {
+          hour: '2-digit',
+          minute: '2-digit'
+        });
+      }
     } else if (checkin_time) {
       // checkin_time is in HH:MM:SS format
       const [hours, minutes] = checkin_time.split(':');
