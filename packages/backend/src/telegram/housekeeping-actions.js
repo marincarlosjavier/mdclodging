@@ -167,6 +167,7 @@ export async function cancelDamageReport(ctx) {
  * Handle media/text during damage report
  */
 export async function handleDamageReportMedia(ctx, type, data) {
+  const { Markup } = await import('telegraf');
   const { userSessions } = await import('./bot.js');
 
   if (!ctx.session || ctx.session.state !== 'reporting_damage') {
@@ -186,9 +187,21 @@ export async function handleDamageReportMedia(ctx, type, data) {
   // Save to userSessions
   userSessions.set(ctx.telegramId.toString(), ctx.session);
 
-  // Send confirmation
+  // Send confirmation with buttons always at the end
   const count = ctx.session.damage_reports.length;
-  await ctx.reply(`✅ ${type === 'photo' ? 'Foto' : type === 'voice' ? 'Audio' : 'Mensaje'} agregado (${count} total)`);
+  const taskId = ctx.session.damage_task_id;
+  const itemType = type === 'photo' ? 'Foto' : type === 'voice' ? 'Audio' : type === 'text' ? 'Mensaje' : 'Elemento';
+
+  await ctx.reply(
+    `✅ ${itemType} agregado\n\n` +
+    `📊 Total de elementos: ${count}`,
+    {
+      ...Markup.inlineKeyboard([
+        [Markup.button.callback('✅ Finalizar Reporte', `hk_finish_damage_${taskId}`)],
+        [Markup.button.callback('❌ Cancelar', 'hk_cancel_damage')]
+      ])
+    }
+  );
 }
 
 /**
