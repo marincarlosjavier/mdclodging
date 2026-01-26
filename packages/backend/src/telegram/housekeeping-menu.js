@@ -12,7 +12,7 @@ export async function navigateTask(ctx, direction, context) {
 
   if (!ctx.session) ctx.session = {};
 
-  const tasksKey = context === 'today' ? 'tasks_today' : 'tasks_active';
+  const tasksKey = context === 'pending' ? 'tasks_pending' : 'tasks_active';
   const tasks = ctx.session[tasksKey];
 
   if (!tasks || tasks.length === 0) {
@@ -32,8 +32,8 @@ export async function navigateTask(ctx, direction, context) {
   // Save to userSessions
   userSessions.set(ctx.telegramId.toString(), ctx.session);
 
-  if (context === 'today') {
-    await showTaskDetail(ctx, tasks, currentIndex, 'today');
+  if (context === 'pending') {
+    await showTaskDetail(ctx, tasks, currentIndex, 'pending');
   } else {
     await showActiveTaskDetail(ctx, tasks, currentIndex);
   }
@@ -56,7 +56,7 @@ export async function showHousekeepingMenu(ctx) {
 
   const buttons = [
     [
-      Markup.button.callback('📋 Tareas de Hoy', 'hk_tasks_today'),
+      Markup.button.callback('📋 Tareas Pendientes', 'hk_tasks_pending'),
       Markup.button.callback('📋 Mis tareas Activas', 'hk_my_active_tasks')
     ],
     [
@@ -93,20 +93,17 @@ export async function showHousekeepingMenu(ctx) {
 }
 
 /**
- * Show tasks for today
+ * Show pending tasks (available to take, any date)
  */
-export async function showTasksToday(ctx) {
+export async function showTasksPending(ctx) {
   const contact = ctx.contact;
-
-  // Calculate today based on Colombia timezone
-  const now = new Date();
-  const today = now.toLocaleDateString('en-CA', { timeZone: 'America/Bogota' }); // YYYY-MM-DD format
 
   const { rows } = await pool.query(
     `SELECT
       r.id as reservation_id,
       r.actual_checkout_time,
       r.checkout_time,
+      r.check_out_date,
       r.adults,
       r.children,
       r.infants,
@@ -118,31 +115,28 @@ export async function showTasksToday(ctx) {
       ct.assigned_at,
       ct.started_at,
       ct.is_priority,
+      ct.scheduled_date,
       u.full_name as assigned_to_name
-     FROM reservations r
+     FROM cleaning_tasks ct
+     JOIN reservations r ON r.id = ct.reservation_id
      JOIN properties p ON p.id = r.property_id
-     LEFT JOIN cleaning_tasks ct ON ct.reservation_id = r.id AND ct.task_type = 'check_out'
      LEFT JOIN users u ON u.id = ct.assigned_to
-     WHERE r.tenant_id = $1
-       AND r.check_out_date = $2
-       AND r.status IN ('active', 'checked_in', 'checked_out')
-       AND (
-         (r.actual_checkout_time IS NULL)
-         OR (ct.id IS NOT NULL AND ct.status IN ('pending', 'in_progress'))
-       )
+     WHERE ct.tenant_id = $1
+       AND ct.status = 'pending'
+       AND ct.assigned_to IS NULL
+       AND ct.task_type = 'check_out'
      ORDER BY
-       CASE WHEN r.actual_checkout_time IS NULL THEN 0 ELSE 1 END,
-       COALESCE(ct.is_priority, false) DESC,
-       COALESCE(ct.status, 'pending') ASC,
+       ct.is_priority DESC,
+       ct.scheduled_date ASC,
        r.actual_checkout_time ASC NULLS LAST,
        COALESCE(r.checkout_time, '12:00')`,
-    [contact.tenant_id, today]
+    [contact.tenant_id]
   );
 
   if (rows.length === 0) {
     await ctx.editMessageText(
-      '✅ *No hay tareas para hoy*\n\n' +
-      'Todas las tareas del día están completadas.',
+      '✅ *No hay tareas pendientes*\n\n' +
+      'Todas las tareas disponibles están asignadas o completadas.',
       {
         parse_mode: 'Markdown',
         ...Markup.inlineKeyboard([[Markup.button.callback('🔙 Volver', 'hk_menu')]])
@@ -155,20 +149,20 @@ export async function showTasksToday(ctx) {
   const { userSessions } = await import('./bot.js');
 
   if (!ctx.session) ctx.session = {};
-  ctx.session.tasks_today = rows;
+  ctx.session.tasks_pending = rows;
   ctx.session.current_task_index = 0;
 
   // Save to userSessions
   userSessions.set(ctx.telegramId.toString(), ctx.session);
 
   // Show first task
-  await showTaskDetail(ctx, rows, 0, 'today');
+  await showTaskDetail(ctx, rows, 0, 'pending');
 }
 
 /**
  * Show individual task detail with pagination
  */
-async function showTaskDetail(ctx, tasks, index, context = 'today') {
+async function showTaskDetail(ctx, tasks, index, context = 'pending') {
   const contact = ctx.contact;
   const task = tasks[index];
   const totalTasks = tasks.length;
@@ -182,7 +176,8 @@ async function showTaskDetail(ctx, tasks, index, context = 'today') {
   const timeStr = time ? formatTime(time) : '';
   const totalGuests = (task.adults || 0) + (task.children || 0) + (task.infants || 0);
 
-  let message = `📋 *TAREA ${index + 1}/${totalTasks}*\n\n`;
+  const contextTitle = context === 'pending' ? 'TAREA PENDIENTE' : 'TAREA';
+  let message = `📋 *${contextTitle} ${index + 1}/${totalTasks}*\n\n`;
 
   const buttons = [];
 

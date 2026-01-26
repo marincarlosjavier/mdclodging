@@ -1,11 +1,11 @@
 import { pool } from '../config/database.js';
-import { showMyActiveTasks, showTasksToday } from './housekeeping-menu.js';
 
 /**
  * Take a task (assign to self)
  */
 export async function takeTask(ctx, taskId) {
   const contact = ctx.contact;
+  const { showTasksPending, showMyActiveTasks } = await import('./housekeeping-menu.js');
 
   try {
     const result = await pool.query(
@@ -23,12 +23,13 @@ export async function takeTask(ctx, taskId) {
 
     if (result.rows.length === 0) {
       await ctx.answerCbQuery('❌ Esta tarea ya no está disponible');
-      await showTasksToday(ctx);
+      await showTasksPending(ctx);
       return;
     }
 
-    await ctx.answerCbQuery('✅ Tarea asignada correctamente');
-    await showTasksToday(ctx);
+    await ctx.answerCbQuery('✅ Tarea tomada - Ve a "Mis tareas Activas"');
+    // After taking a task, show pending tasks (now one less available)
+    await showTasksPending(ctx);
   } catch (error) {
     console.error('Error taking task:', error);
     await ctx.answerCbQuery('❌ Error al tomar la tarea');
@@ -128,19 +129,19 @@ export async function finishDamageReport(ctx, taskId) {
   await ctx.answerCbQuery(`✅ ${reports.length} elemento(s) guardado(s)`);
 
   // Return to the specific task view automatically
-  const { showTasksToday } = await import('./housekeeping-menu.js');
+  const { showTasksPending } = await import('./housekeeping-menu.js');
 
-  // Check which context we're in (today or active tasks)
-  if (ctx.session.tasks_today && ctx.session.current_task_index !== undefined) {
+  // Check which context we're in (pending or active tasks)
+  if (ctx.session.tasks_pending && ctx.session.current_task_index !== undefined) {
     const { default: showTaskDetail } = await import('./housekeeping-menu.js');
     // Re-fetch tasks to get updated data
-    await showTasksToday(ctx);
+    await showTasksPending(ctx);
   } else if (ctx.session.tasks_active && ctx.session.current_task_index !== undefined) {
     const { showMyActiveTasks } = await import('./housekeeping-menu.js');
     await showMyActiveTasks(ctx);
   } else {
-    // Fallback to tasks today
-    await showTasksToday(ctx);
+    // Fallback to tasks pending
+    await showTasksPending(ctx);
   }
 }
 
@@ -162,8 +163,8 @@ export async function cancelDamageReport(ctx) {
 
   await ctx.answerCbQuery('❌ Reporte cancelado');
 
-  const { showTasksToday } = await import('./housekeeping-menu.js');
-  await showTasksToday(ctx);
+  const { showTasksPending } = await import('./housekeeping-menu.js');
+  await showTasksPending(ctx);
 }
 
 /**

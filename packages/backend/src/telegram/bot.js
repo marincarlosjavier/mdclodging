@@ -27,7 +27,7 @@ import {
 } from './admin-handlers.js';
 import {
   showHousekeepingMenu,
-  showTasksToday,
+  showTasksPending,
   showMyActiveTasks,
   showDailySummary,
   showTasksTomorrow,
@@ -627,8 +627,8 @@ async function handleCallback(ctx) {
   // Housekeeping menu callbacks
   if (action === 'hk_menu') {
     return await showHousekeepingMenu(ctx);
-  } else if (action === 'hk_tasks_today') {
-    return await showTasksToday(ctx);
+  } else if (action === 'hk_tasks_pending') {
+    return await showTasksPending(ctx);
   } else if (action === 'hk_my_active_tasks') {
     return await showMyActiveTasks(ctx);
   } else if (action === 'hk_daily_summary') {
@@ -1335,7 +1335,7 @@ export async function notifyCheckout(tenantId, reservationData) {
       priorityFooter;
 
     const keyboard = Markup.inlineKeyboard([
-      [Markup.button.callback('📋 Ver Tareas de Hoy', 'hk_tasks_today')]
+      [Markup.button.callback('📋 Ver Tareas Pendientes', 'hk_tasks_pending')]
     ]);
 
     // Send to all housekeeping staff
