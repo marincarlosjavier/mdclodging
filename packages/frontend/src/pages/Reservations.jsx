@@ -239,11 +239,17 @@ export default function Reservations() {
     let filtered = [...reservations];
 
     if (activeFilter === 'checkins') {
-      // Today's check-ins: show all reservations with check-in today, regardless of status
-      filtered = filtered.filter(r => getDatePart(r.check_in_date) === today);
+      // Today's check-ins: show active or checked_in (not cancelled or checked_out)
+      filtered = filtered.filter(r =>
+        getDatePart(r.check_in_date) === today &&
+        ['active', 'checked_in'].includes(r.status)
+      );
     } else if (activeFilter === 'checkouts') {
-      // Today's check-outs: show all reservations with checkout today, regardless of status
-      filtered = filtered.filter(r => getDatePart(r.check_out_date) === today);
+      // Today's check-outs: show active, checked_in, or checked_out (not cancelled)
+      filtered = filtered.filter(r =>
+        getDatePart(r.check_out_date) === today &&
+        ['active', 'checked_in', 'checked_out'].includes(r.status)
+      );
     } else if (activeFilter === 'stayovers') {
       // Stayovers: check_in < today && check_out > today
       filtered = filtered.filter(r => {
@@ -615,15 +621,31 @@ export default function Reservations() {
     };
 
     // Check-ins today
-    const checkins = reservations.filter(r => getDatePart(r.check_in_date) === today && r.status === 'active').length;
+    const checkinsTotal = reservations.filter(r =>
+      getDatePart(r.check_in_date) === today &&
+      ['active', 'checked_in'].includes(r.status)
+    ).length;
+    const checkinsCompleted = reservations.filter(r =>
+      getDatePart(r.check_in_date) === today &&
+      r.status === 'checked_in'
+    ).length;
+    const checkins = { total: checkinsTotal, completed: checkinsCompleted };
 
     // Total guests in operation: all checked_in guests (already in the property)
     const totalGuests = reservations
       .filter(r => r.status === 'checked_in')
       .reduce((sum, r) => sum + (r.adults || 0) + (r.children || 0) + (r.infants || 0), 0);
 
-    // Check-outs today (count all checkouts today, regardless of checked_in status)
-    const checkouts = reservations.filter(r => getDatePart(r.check_out_date) === today && ['active', 'checked_in'].includes(r.status)).length;
+    // Check-outs today
+    const checkoutsTotal = reservations.filter(r =>
+      getDatePart(r.check_out_date) === today &&
+      ['active', 'checked_in', 'checked_out'].includes(r.status)
+    ).length;
+    const checkoutsCompleted = reservations.filter(r =>
+      getDatePart(r.check_out_date) === today &&
+      r.status === 'checked_out'
+    ).length;
+    const checkouts = { total: checkoutsTotal, completed: checkoutsCompleted };
 
     // Stayovers: check_in < today && check_out > today
     const stayovers = reservations.filter(r => {
@@ -702,7 +724,9 @@ export default function Reservations() {
           <div className="flex items-center justify-between mb-2">
             <LogIn className={`w-8 h-8 ${activeFilter === 'checkins' ? 'text-green-600' : 'text-green-500'}`} />
           </div>
-          <p className="text-2xl font-bold text-gray-900">{stats.checkins}</p>
+          <p className="text-2xl font-bold text-gray-900">
+            {stats.checkins.completed}/{stats.checkins.total}
+          </p>
           <p className="text-xs text-gray-500">Check-ins</p>
         </button>
 
@@ -718,7 +742,9 @@ export default function Reservations() {
           <div className="flex items-center justify-between mb-2">
             <LogOut className={`w-8 h-8 ${activeFilter === 'checkouts' ? 'text-orange-600' : 'text-orange-500'}`} />
           </div>
-          <p className="text-2xl font-bold text-gray-900">{stats.checkouts}</p>
+          <p className="text-2xl font-bold text-gray-900">
+            {stats.checkouts.completed}/{stats.checkouts.total}
+          </p>
           <p className="text-xs text-gray-500">Check-outs</p>
         </button>
 
@@ -833,18 +859,14 @@ export default function Reservations() {
                 </td>
               </tr>
             ) : (
-              (activeFilter === 'housekeeping' ? housekeepingReport : sortedReservations).map((reservation, index) => {
-                const totalCount = activeFilter === 'housekeeping' ? housekeepingReport.length : sortedReservations.length;
+              (activeFilter === 'housekeeping' ? housekeepingReport : sortedReservations).map((reservation) => {
                 // For housekeeping filter, render checkout report format
                 if (activeFilter === 'housekeeping') {
                   const timeData = calculateElapsedTime(reservation);
                   return (
                     <tr key={reservation.id} className={reservation.actual_checkout_time ? 'bg-yellow-50' : 'hover:bg-gray-50'}>
                       <td className="px-2 py-3 whitespace-nowrap">
-                        <div className="text-xs font-mono text-gray-700">
-                          <div>#{reservation.id}</div>
-                          <div className="text-gray-500">{index + 1}/{totalCount}</div>
-                        </div>
+                        <span className="text-xs font-mono text-gray-700">#{reservation.id}</span>
                       </td>
                       <td className="px-3 py-3 whitespace-nowrap">
                         <div>
@@ -907,9 +929,7 @@ export default function Reservations() {
                 if (reservation.isPropertyOnly) {
                   return (
                     <tr key={reservation.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 text-sm font-mono text-gray-700">
-                        <div className="text-xs text-gray-500">{index + 1}/{totalCount}</div>
-                      </td>
+                      <td className="px-6 py-4 text-sm font-mono text-gray-700">-</td>
                       <td className="px-6 py-4">
                         <div className="text-sm font-medium text-gray-900">{reservation.property_name}</div>
                         <div className="text-xs text-gray-500">{reservation.property_type_name}</div>
@@ -943,8 +963,7 @@ export default function Reservations() {
                 return (
                   <tr key={reservation.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 text-sm font-mono text-gray-700">
-                      <div>#{reservation.id}</div>
-                      <div className="text-xs text-gray-500">{index + 1}/{totalCount}</div>
+                      #{reservation.id}
                     </td>
                     <td className="px-6 py-4">
                       <div className="text-sm font-medium text-gray-900">{reservation.property_name}</div>
