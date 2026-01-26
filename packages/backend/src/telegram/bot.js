@@ -150,56 +150,38 @@ export async function startTelegramBot() {
           // Clear session
           userSessions.delete(ctx.telegramId.toString());
 
-          // Set state to awaiting PIN
-          ctx.session.state = 'awaiting_pin';
-          userSessions.set(ctx.telegramId.toString(), ctx.session);
-
           return ctx.reply(
             '⏰ *Sesión Expirada*\n\n' +
-            `Tu sesión ha expirado por inactividad (${sessionTimeout.timeoutHours} horas).\n\n` +
-            'Por favor ingresa tu PIN de 4 dígitos para continuar:',
-            { parse_mode: 'Markdown' }
+            `Tu sesión ha expirado por inactividad (${sessionTimeout.timeoutHours} horas).`,
+            {
+              parse_mode: 'Markdown',
+              ...Markup.inlineKeyboard([[Markup.button.callback('🔑 Entrar', 'login')]])
+            }
           );
         }
       }
 
       // Auto-prompt for login if user is linked but not logged in
       if (contact.user_id && !contact.is_logged_in && !ctx.session.state) {
-        // Check if user has PIN set
-        if (!contact.login_pin) {
-          // Need to set PIN first
-          ctx.session.state = 'setting_pin';
-          userSessions.set(ctx.telegramId.toString(), ctx.session);
-
-          return ctx.reply(
-            '🔐 *Configurar PIN*\n\n' +
-            'Para acceder al sistema, necesitas configurar un PIN de 4 dígitos.\n\n' +
-            '📝 Ingresa tu PIN (4 dígitos numéricos):',
-            { parse_mode: 'Markdown' }
-          );
-        }
-
-        // Prompt for PIN
-        ctx.session.state = 'awaiting_pin';
-        userSessions.set(ctx.telegramId.toString(), ctx.session);
-
         return ctx.reply(
-          '🔐 *Inicio de Sesión*\n\n' +
-          'Por favor ingresa tu PIN de 4 dígitos:',
-          { parse_mode: 'Markdown' }
+          '👋 *Bienvenido*\n\n' +
+          'Para acceder al sistema, presiona el botón de abajo.',
+          {
+            parse_mode: 'Markdown',
+            ...Markup.inlineKeyboard([[Markup.button.callback('🔑 Entrar', 'login')]])
+          }
         );
       }
 
       // If not linked, prompt to link
       if (!contact.user_id && !ctx.session.state) {
-        ctx.session.state = 'awaiting_link_code';
-        userSessions.set(ctx.telegramId.toString(), ctx.session);
-
         return ctx.reply(
-          '👋 *Bienvenido al Sistema de Gestión Hotelera*\n\n' +
-          'Para comenzar, necesitas vincular tu cuenta de Telegram.\n\n' +
-          '📝 Solicita un código de vinculación a tu administrador e ingrésalo aquí:',
-          { parse_mode: 'Markdown' }
+          '👋 *Bienvenido*\n\n' +
+          'Para comenzar, presiona el botón de abajo.',
+          {
+            parse_mode: 'Markdown',
+            ...Markup.inlineKeyboard([[Markup.button.callback('🔑 Entrar', 'login')]])
+          }
         );
       }
     }
@@ -361,11 +343,14 @@ async function handleStart(ctx) {
     return await showMainMenu(ctx, contact);
   }
 
-  // Otherwise, middleware will handle the login flow automatically
+  // Otherwise, show login button
   return ctx.reply(
     '👋 *Bienvenido*\n\n' +
-    'Escribe cualquier mensaje para continuar.',
-    { parse_mode: 'Markdown' }
+    'Para comenzar, presiona el botón de abajo.',
+    {
+      parse_mode: 'Markdown',
+      ...Markup.inlineKeyboard([[Markup.button.callback('🔑 Entrar', 'login')]])
+    }
   );
 }
 
@@ -716,7 +701,46 @@ async function handleCallback(ctx) {
 
   await ctx.answerCbQuery();
 
-  if (action === 'my_tasks') {
+  if (action === 'login') {
+    // Handle login button click
+    const contact = ctx.contact;
+
+    // If not linked, prompt for link code
+    if (!contact.user_id) {
+      ctx.session.state = 'awaiting_link_code';
+      userSessions.set(ctx.telegramId.toString(), ctx.session);
+
+      return await ctx.editMessageText(
+        '👋 *Bienvenido al Sistema de Gestión Hotelera*\n\n' +
+        'Para comenzar, necesitas vincular tu cuenta de Telegram.\n\n' +
+        '📝 Solicita un código de vinculación a tu administrador e ingrésalo aquí:',
+        { parse_mode: 'Markdown' }
+      );
+    }
+
+    // If linked but no PIN, set PIN
+    if (!contact.login_pin) {
+      ctx.session.state = 'setting_pin';
+      userSessions.set(ctx.telegramId.toString(), ctx.session);
+
+      return await ctx.editMessageText(
+        '🔐 *Configurar PIN*\n\n' +
+        'Para acceder al sistema, necesitas configurar un PIN de 4 dígitos.\n\n' +
+        '📝 Ingresa tu PIN (4 dígitos numéricos):',
+        { parse_mode: 'Markdown' }
+      );
+    }
+
+    // Prompt for PIN
+    ctx.session.state = 'awaiting_pin';
+    userSessions.set(ctx.telegramId.toString(), ctx.session);
+
+    return await ctx.editMessageText(
+      '🔐 *Inicio de Sesión*\n\n' +
+      'Por favor ingresa tu PIN de 4 dígitos:',
+      { parse_mode: 'Markdown' }
+    );
+  } else if (action === 'my_tasks') {
     await showMyTasks(ctx);
   } else if (action === 'pending_tasks') {
     await showPendingTasks(ctx);
@@ -1086,9 +1110,11 @@ async function handleLogoutCommand(ctx) {
 
     ctx.reply(
       '👋 *Sesión Cerrada*\n\n' +
-      'Has cerrado sesión correctamente.\n\n' +
-      'Usa /start para iniciar sesión nuevamente.',
-      { parse_mode: 'Markdown' }
+      'Has cerrado sesión correctamente.',
+      {
+        parse_mode: 'Markdown',
+        ...Markup.inlineKeyboard([[Markup.button.callback('🔑 Entrar', 'login')]])
+      }
     );
   } catch (error) {
     console.error('Error in logout:', error);
@@ -1109,9 +1135,11 @@ async function handleLogoutCallback(ctx) {
 
     await ctx.editMessageText(
       '👋 *Sesión Cerrada*\n\n' +
-      'Has cerrado sesión correctamente.\n\n' +
-      'Usa /start para iniciar sesión nuevamente.',
-      { parse_mode: 'Markdown' }
+      'Has cerrado sesión correctamente.',
+      {
+        parse_mode: 'Markdown',
+        ...Markup.inlineKeyboard([[Markup.button.callback('🔑 Entrar', 'login')]])
+      }
     );
   } catch (error) {
     console.error('Error in logout:', error);
