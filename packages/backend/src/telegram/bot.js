@@ -1255,15 +1255,19 @@ export async function notifyCheckout(tenantId, reservationData) {
       `📍 Propiedad: *${property_name}*\n` +
       `⏰ Hora: ${timeStr}\n` +
       `👥 Huéspedes: ${totalGuests}\n\n` +
-      `La propiedad está disponible para limpieza.\n` +
-      `Usa /tareas para ver y tomar la tarea.` +
+      `La propiedad está disponible para limpieza.` +
       priorityFooter;
+
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('📋 Ver Tareas de Hoy', 'hk_tasks_today')]
+    ]);
 
     // Send to all housekeeping staff
     for (const contact of result.rows) {
       try {
         await bot.telegram.sendMessage(contact.telegram_id, message, {
-          parse_mode: 'Markdown'
+          parse_mode: 'Markdown',
+          ...keyboard
         });
       } catch (error) {
         console.error(`Failed to notify ${contact.telegram_id}:`, error.message);

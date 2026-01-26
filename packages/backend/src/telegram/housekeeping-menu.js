@@ -120,17 +120,17 @@ export async function showTasksToday(ctx) {
 
     if (task.status === 'in_progress' && task.assigned_to === contact.user_id) {
       statusText = '⚙️ EN PROGRESO';
-      actionButton = Markup.button.callback('✅ Completar', `hk_complete_${task.id}`);
+      actionButton = Markup.button.callback(`✅ Completar - ${task.property_name}`, `hk_complete_${task.id}`);
     } else if (task.status === 'in_progress') {
       statusText = `⚙️ En progreso - ${task.assigned_to_name}`;
     } else if (task.assigned_to === contact.user_id) {
       statusText = '📌 Asignada a mí';
-      actionButton = Markup.button.callback('▶️ Iniciar', `hk_start_${task.id}`);
+      actionButton = Markup.button.callback(`▶️ Iniciar - ${task.property_name}`, `hk_start_${task.id}`);
     } else if (task.assigned_to) {
       statusText = `👤 Asignada - ${task.assigned_to_name}`;
     } else {
       statusText = '🆓 Disponible';
-      actionButton = Markup.button.callback('✋ Tomar', `hk_take_${task.id}`);
+      actionButton = Markup.button.callback(`✋ Tomar - ${task.property_name}`, `hk_take_${task.id}`);
     }
 
     message += `${priorityFlag}*${task.property_name}*\n`;
@@ -138,6 +138,7 @@ export async function showTasksToday(ctx) {
     if (timeStr) message += ` | ${timeStr}`;
     message += `\n${statusText}\n`;
 
+    // Add action button immediately after this task
     if (actionButton) {
       buttons.push([actionButton]);
     }
@@ -215,11 +216,11 @@ export async function showMyActiveTasks(ctx) {
     if (timeStr) message += ` | ${timeStr}`;
     message += `\n${statusText}\n`;
 
-    // Action button
+    // Add action button immediately after this task
     if (task.status === 'pending') {
-      buttons.push([Markup.button.callback('▶️ Iniciar', `hk_start_${task.id}`)]);
+      buttons.push([Markup.button.callback(`▶️ Iniciar - ${task.property_name}`, `hk_start_${task.id}`)]);
     } else if (task.status === 'in_progress') {
-      buttons.push([Markup.button.callback('✅ Completar', `hk_complete_${task.id}`)]);
+      buttons.push([Markup.button.callback(`✅ Completar - ${task.property_name}`, `hk_complete_${task.id}`)]);
     }
 
     if (index < rows.length - 1) {
