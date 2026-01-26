@@ -106,7 +106,6 @@ export async function startDamageReport(ctx, taskId) {
  * Finish damage report
  */
 export async function finishDamageReport(ctx, taskId) {
-  const { Markup } = await import('telegraf');
   const { userSessions } = await import('./bot.js');
 
   if (!ctx.session || !ctx.session.damage_reports) {
@@ -118,7 +117,7 @@ export async function finishDamageReport(ctx, taskId) {
   // TODO: Save damage reports to database
   console.log('Damage reports for task', taskId, ':', reports);
 
-  // Clear session state
+  // Clear damage report state
   delete ctx.session.state;
   delete ctx.session.damage_task_id;
   delete ctx.session.damage_reports;
@@ -126,19 +125,23 @@ export async function finishDamageReport(ctx, taskId) {
   // Update userSessions
   userSessions.set(ctx.telegramId.toString(), ctx.session);
 
-  await ctx.answerCbQuery('✅ Reporte guardado');
+  await ctx.answerCbQuery(`✅ ${reports.length} elemento(s) guardado(s)`);
 
-  // Return to task view
-  await ctx.editMessageText(
-    `✅ *Reporte de Daños Guardado*\n\n` +
-    `Total de elementos reportados: ${reports.length}`,
-    {
-      parse_mode: 'Markdown',
-      ...Markup.inlineKeyboard([
-        [Markup.button.callback('🔙 Volver a Tareas', 'hk_tasks_today')]
-      ])
-    }
-  );
+  // Return to the specific task view automatically
+  const { showTasksToday } = await import('./housekeeping-menu.js');
+
+  // Check which context we're in (today or active tasks)
+  if (ctx.session.tasks_today && ctx.session.current_task_index !== undefined) {
+    const { default: showTaskDetail } = await import('./housekeeping-menu.js');
+    // Re-fetch tasks to get updated data
+    await showTasksToday(ctx);
+  } else if (ctx.session.tasks_active && ctx.session.current_task_index !== undefined) {
+    const { showMyActiveTasks } = await import('./housekeeping-menu.js');
+    await showMyActiveTasks(ctx);
+  } else {
+    // Fallback to tasks today
+    await showTasksToday(ctx);
+  }
 }
 
 /**
