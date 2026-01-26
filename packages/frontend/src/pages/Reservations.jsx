@@ -239,11 +239,11 @@ export default function Reservations() {
     let filtered = [...reservations];
 
     if (activeFilter === 'checkins') {
-      // Today's check-ins: check_in_date === today
-      filtered = filtered.filter(r => getDatePart(r.check_in_date) === today && r.status === 'active');
+      // Today's check-ins: show all reservations with check-in today, regardless of status
+      filtered = filtered.filter(r => getDatePart(r.check_in_date) === today);
     } else if (activeFilter === 'checkouts') {
-      // Today's check-outs: check_out_date === today
-      filtered = filtered.filter(r => getDatePart(r.check_out_date) === today && ['active', 'checked_in'].includes(r.status));
+      // Today's check-outs: show all reservations with checkout today, regardless of status
+      filtered = filtered.filter(r => getDatePart(r.check_out_date) === today);
     } else if (activeFilter === 'stayovers') {
       // Stayovers: check_in < today && check_out > today
       filtered = filtered.filter(r => {
@@ -833,14 +833,18 @@ export default function Reservations() {
                 </td>
               </tr>
             ) : (
-              (activeFilter === 'housekeeping' ? housekeepingReport : sortedReservations).map((reservation) => {
+              (activeFilter === 'housekeeping' ? housekeepingReport : sortedReservations).map((reservation, index) => {
+                const totalCount = activeFilter === 'housekeeping' ? housekeepingReport.length : sortedReservations.length;
                 // For housekeeping filter, render checkout report format
                 if (activeFilter === 'housekeeping') {
                   const timeData = calculateElapsedTime(reservation);
                   return (
                     <tr key={reservation.id} className={reservation.actual_checkout_time ? 'bg-yellow-50' : 'hover:bg-gray-50'}>
                       <td className="px-2 py-3 whitespace-nowrap">
-                        <span className="text-xs font-mono text-gray-700">#{reservation.id}</span>
+                        <div className="text-xs font-mono text-gray-700">
+                          <div>#{reservation.id}</div>
+                          <div className="text-gray-500">{index + 1}/{totalCount}</div>
+                        </div>
                       </td>
                       <td className="px-3 py-3 whitespace-nowrap">
                         <div>
@@ -903,7 +907,9 @@ export default function Reservations() {
                 if (reservation.isPropertyOnly) {
                   return (
                     <tr key={reservation.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 text-sm font-mono text-gray-700">-</td>
+                      <td className="px-6 py-4 text-sm font-mono text-gray-700">
+                        <div className="text-xs text-gray-500">{index + 1}/{totalCount}</div>
+                      </td>
                       <td className="px-6 py-4">
                         <div className="text-sm font-medium text-gray-900">{reservation.property_name}</div>
                         <div className="text-xs text-gray-500">{reservation.property_type_name}</div>
@@ -937,7 +943,8 @@ export default function Reservations() {
                 return (
                   <tr key={reservation.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 text-sm font-mono text-gray-700">
-                      #{reservation.id}
+                      <div>#{reservation.id}</div>
+                      <div className="text-xs text-gray-500">{index + 1}/{totalCount}</div>
                     </td>
                     <td className="px-6 py-4">
                       <div className="text-sm font-medium text-gray-900">{reservation.property_name}</div>
