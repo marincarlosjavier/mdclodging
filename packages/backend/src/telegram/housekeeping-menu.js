@@ -337,20 +337,19 @@ export async function showTasksTomorrow(ctx) {
 
   const { rows } = await pool.query(
     `SELECT
-      ct.id,
-      ct.task_type,
-      ct.is_priority,
+      r.id as reservation_id,
       r.checkout_time,
-      p.name as property_name
-     FROM cleaning_tasks ct
-     JOIN reservations r ON r.id = ct.reservation_id
+      p.name as property_name,
+      pt.name as property_type_name
+     FROM reservations r
      JOIN properties p ON p.id = r.property_id
-     WHERE ct.tenant_id = $1
-       AND ct.scheduled_date = $2
-       AND ct.status = 'pending'
+     JOIN property_types pt ON p.property_type_id = pt.id
+     WHERE r.tenant_id = $1
+       AND r.check_out_date = $2
+       AND r.status IN ('active', 'checked_in')
      ORDER BY
-       ct.is_priority DESC,
-       r.checkout_time ASC NULLS LAST`,
+       COALESCE(r.checkout_time, '12:00') ASC,
+       p.name`,
     [contact.tenant_id, tomorrowDate]
   );
 
@@ -368,14 +367,11 @@ export async function showTasksTomorrow(ctx) {
   let message = `📅 *TAREAS DE MAÑANA* (${rows.length})\n\n`;
 
   rows.forEach((task, index) => {
-    const taskTypeEmoji = getTaskTypeEmoji(task.task_type);
-    const taskTypeName = getTaskTypeName(task.task_type);
-    const priorityFlag = task.is_priority ? '🔴 ' : '';
     const timeStr = task.checkout_time ? formatTime(task.checkout_time) : '';
 
-    message += `${priorityFlag}*${task.property_name}*\n`;
-    message += `${taskTypeEmoji} ${taskTypeName}`;
-    if (timeStr) message += ` | ${timeStr}`;
+    message += `*${task.property_name}*\n`;
+    message += `🏠 ${task.property_type_name}`;
+    if (timeStr) message += ` | Salida: ${timeStr}`;
 
     if (index < rows.length - 1) {
       message += '\n\n';
