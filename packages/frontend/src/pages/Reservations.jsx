@@ -286,8 +286,22 @@ export default function Reservations() {
       filtered = filtered.filter(r => r.status === 'checked_out' && getDatePart(r.check_out_date) === today);
     }
 
-    // Then sort
+    // Sort with priority: pending first, then by selected column
     const sorted = filtered.sort((a, b) => {
+      // First, check if we're in check-ins or check-outs filter
+      if (activeFilter === 'checkins' || activeFilter === 'checkouts') {
+        const aCompleted = (activeFilter === 'checkins' && a.status === 'checked_in') ||
+                          (activeFilter === 'checkouts' && a.status === 'checked_out');
+        const bCompleted = (activeFilter === 'checkins' && b.status === 'checked_in') ||
+                          (activeFilter === 'checkouts' && b.status === 'checked_out');
+
+        // Pending (not completed) should come first
+        if (aCompleted !== bCompleted) {
+          return aCompleted ? 1 : -1;
+        }
+      }
+
+      // Then sort by selected column
       let aValue, bValue;
 
       switch (sortColumn) {
