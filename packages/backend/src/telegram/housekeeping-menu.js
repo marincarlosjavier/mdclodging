@@ -129,7 +129,10 @@ export async function showTasksPending(ctx) {
        AND ct.status = 'pending'
        AND ct.assigned_to IS NULL
        AND ct.scheduled_date <= $2
-       AND r.status IN ('active', 'checked_in')
+       AND (
+         (ct.task_type = 'check_out' AND r.status = 'checked_out')
+         OR (ct.task_type IN ('stay_over', 'deep_cleaning') AND r.status IN ('active', 'checked_in'))
+       )
      ORDER BY
        ct.is_priority DESC,
        ct.scheduled_date ASC,
@@ -479,6 +482,7 @@ export async function showTasksTomorrow(ctx) {
     const timeStr = task.checkout_time ? formatTime(task.checkout_time) : '';
 
     message += `*${task.property_name}*\n`;
+    message += `🔖 Reserva #${task.reservation_id}\n`;
     message += `🏠 ${task.property_type_name}`;
     if (timeStr) message += ` | Salida: ${timeStr}`;
 
