@@ -128,7 +128,6 @@ export async function showTasksPending(ctx) {
      WHERE ct.tenant_id = $1
        AND ct.status = 'pending'
        AND ct.assigned_to IS NULL
-       AND ct.task_type = 'check_out'
        AND ct.scheduled_date <= $2
      ORDER BY
        ct.is_priority DESC,
@@ -525,7 +524,7 @@ function getTaskTypeEmoji(taskType) {
   const emojis = {
     check_out: '🚪',
     stay_over: '🧹',
-    deep_clean: '🧼'
+    deep_cleaning: '🧼'
   };
   return emojis[taskType] || '🧹';
 }
@@ -534,7 +533,7 @@ function getTaskTypeName(taskType) {
   const names = {
     check_out: 'CHECK OUT',
     stay_over: 'STAY OVER',
-    deep_clean: 'DEEP CLEAN'
+    deep_cleaning: 'DEEP CLEANING'
   };
   return names[taskType] || taskType;
 }
