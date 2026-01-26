@@ -93,10 +93,14 @@ export async function showHousekeepingMenu(ctx) {
 }
 
 /**
- * Show pending tasks (available to take, any date)
+ * Show pending tasks (available to take, up to today)
  */
 export async function showTasksPending(ctx) {
   const contact = ctx.contact;
+
+  // Calculate today based on Colombia timezone
+  const now = new Date();
+  const today = now.toLocaleDateString('en-CA', { timeZone: 'America/Bogota' }); // YYYY-MM-DD format
 
   const { rows } = await pool.query(
     `SELECT
@@ -125,12 +129,13 @@ export async function showTasksPending(ctx) {
        AND ct.status = 'pending'
        AND ct.assigned_to IS NULL
        AND ct.task_type = 'check_out'
+       AND ct.scheduled_date <= $2
      ORDER BY
        ct.is_priority DESC,
        ct.scheduled_date ASC,
        r.actual_checkout_time ASC NULLS LAST,
        COALESCE(r.checkout_time, '12:00')`,
-    [contact.tenant_id]
+    [contact.tenant_id, today]
   );
 
   if (rows.length === 0) {
@@ -184,7 +189,8 @@ async function showTaskDetail(ctx, tasks, index, context = 'pending') {
   if (!hasCheckout) {
     // Waiting for checkout
     const checkoutTimeStr = task.checkout_time ? formatTime(task.checkout_time) : '';
-    message += `${priorityFlag}*${task.property_name}*\n\n`;
+    message += `${priorityFlag}*${task.property_name}*\n`;
+    message += `🔖 Reserva #${task.reservation_id}\n\n`;
     message += `👥 Huéspedes: ${totalGuests}\n`;
     if (checkoutTimeStr) message += `🕐 Salida esperada: ${checkoutTimeStr}\n`;
     message += `\n⏳ *Esperando Check out*`;
@@ -208,7 +214,8 @@ async function showTaskDetail(ctx, tasks, index, context = 'pending') {
       actionButton = Markup.button.callback('✋ Tomar Tarea', `hk_take_${task.cleaning_task_id}`);
     }
 
-    message += `${priorityFlag}*${task.property_name}*\n\n`;
+    message += `${priorityFlag}*${task.property_name}*\n`;
+    message += `🔖 Reserva #${task.reservation_id}\n\n`;
     message += `${taskTypeEmoji} *${taskTypeName}*\n`;
     message += `🕐 ${timeStr}\n`;
     message += `👥 Huéspedes: ${totalGuests}\n`;
