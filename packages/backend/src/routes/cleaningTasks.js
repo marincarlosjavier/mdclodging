@@ -187,23 +187,53 @@ router.patch('/:id/complete', asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { notes } = req.body;
 
-  const result = await pool.query(
-    `UPDATE cleaning_tasks
-     SET status = 'completed',
-         completed_at = CURRENT_TIMESTAMP AT TIME ZONE 'UTC',
-         completed_by = $1,
-         notes = COALESCE($2, notes),
-         updated_at = CURRENT_TIMESTAMP AT TIME ZONE 'UTC'
-     WHERE id = $3 AND tenant_id = $4
-     RETURNING *`,
-    [req.user.id, notes, id, req.tenantId]
-  );
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
 
-  if (result.rows.length === 0) {
-    return res.status(404).json({ error: 'Cleaning task not found' });
+    const result = await client.query(
+      `UPDATE cleaning_tasks
+       SET status = 'completed',
+           completed_at = CURRENT_TIMESTAMP AT TIME ZONE 'UTC',
+           completed_by = $1,
+           notes = COALESCE($2, notes),
+           updated_at = CURRENT_TIMESTAMP AT TIME ZONE 'UTC'
+       WHERE id = $3 AND tenant_id = $4
+       RETURNING *`,
+      [req.user.id, notes, id, req.tenantId]
+    );
+
+    if (result.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Cleaning task not found' });
+    }
+
+    const task = result.rows[0];
+
+    // Update property cleaning counter based on task type
+    if (task.task_type === 'check_out') {
+      // Increment counter for regular check_out
+      await client.query(
+        'UPDATE properties SET cleaning_count = cleaning_count + 1 WHERE id = $1',
+        [task.property_id]
+      );
+    } else if (task.task_type === 'deep_cleaning') {
+      // Reset counter for deep_cleaning
+      await client.query(
+        'UPDATE properties SET cleaning_count = 0 WHERE id = $1',
+        [task.property_id]
+      );
+    }
+    // stay_over tasks don't affect the counter
+
+    await client.query('COMMIT');
+    res.json(task);
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
   }
-
-  res.json(result.rows[0]);
 }));
 
 // PATCH /api/cleaning-tasks/:id/start - Mark task as in progress
@@ -304,6 +334,22 @@ router.put('/:id/complete', requireRole('admin', 'supervisor'), asyncHandler(asy
 
     // Note: We don't update the reservation status when completing cleaning
     // The reservation stays as 'checked_out' - only the cleaning_task is marked as completed
+
+    // Update property cleaning counter based on task type
+    if (task.task_type === 'check_out') {
+      // Increment counter for regular check_out
+      await client.query(
+        'UPDATE properties SET cleaning_count = cleaning_count + 1 WHERE id = $1',
+        [task.property_id]
+      );
+    } else if (task.task_type === 'deep_cleaning') {
+      // Reset counter for deep_cleaning
+      await client.query(
+        'UPDATE properties SET cleaning_count = 0 WHERE id = $1',
+        [task.property_id]
+      );
+    }
+    // stay_over tasks don't affect the counter
 
     await client.query('COMMIT');
     res.json(task);

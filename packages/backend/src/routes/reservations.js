@@ -8,7 +8,7 @@ const router = express.Router();
 router.use(authenticate);
 
 // Helper function to generate cleaning tasks for a reservation
-async function generateCleaningTasks(client, reservation, tenantId, stayOverInterval, deepCleanInterval = 30) {
+async function generateCleaningTasks(client, reservation, tenantId, stayOverInterval, deepCleanInterval = 11) {
   const tasks = [];
   const checkInDate = new Date(reservation.check_in_date);
   const checkOutDate = new Date(reservation.check_out_date);
@@ -16,11 +16,27 @@ async function generateCleaningTasks(client, reservation, tenantId, stayOverInte
   // Calculate days of stay
   const daysDiff = Math.floor((checkOutDate - checkInDate) / (1000 * 60 * 60 * 24));
 
-  // 1. Generate check-out cleaning task (Aseo General - on checkout date)
+  // Get current cleaning count for this property
+  const propertyResult = await client.query(
+    'SELECT cleaning_count FROM properties WHERE id = $1',
+    [reservation.property_id]
+  );
+  const currentCount = propertyResult.rows[0]?.cleaning_count || 0;
+
+  // Determine if next checkout should be deep_cleaning
+  const nextCount = currentCount + 1;
+  const isDeepCleaningTime = nextCount >= deepCleanInterval;
+
+  // 1. Generate check-out cleaning task (check_out or deep_cleaning based on count)
+  const checkoutTaskType = isDeepCleaningTime ? 'deep_cleaning' : 'check_out';
   tasks.push({
-    type: 'check_out',
+    type: checkoutTaskType,
     date: checkOutDate
   });
+
+  // If this will be a deep_cleaning, reset the counter when the task is created
+  // Note: The counter will actually reset when the task is completed, not here
+  // We're just determining what type of task to create
 
   // 2. Generate stay-over cleaning tasks (Aseo Liviano - every X days during stay)
   if (daysDiff > stayOverInterval) {
@@ -28,31 +44,11 @@ async function generateCleaningTasks(client, reservation, tenantId, stayOverInte
     currentDate.setDate(currentDate.getDate() + stayOverInterval);
 
     while (currentDate < checkOutDate) {
-      // Check if this date coincides with a deep clean
-      const daysFromCheckIn = Math.floor((currentDate - checkInDate) / (1000 * 60 * 60 * 24));
-      const isDeepCleanDay = daysFromCheckIn % deepCleanInterval === 0;
-
-      if (!isDeepCleanDay) {
-        tasks.push({
-          type: 'stay_over',
-          date: new Date(currentDate)
-        });
-      }
-      currentDate.setDate(currentDate.getDate() + stayOverInterval);
-    }
-  }
-
-  // 3. Generate deep cleaning tasks (Aseo Profundo - every 30 days during stay)
-  if (daysDiff > deepCleanInterval) {
-    let currentDate = new Date(checkInDate);
-    currentDate.setDate(currentDate.getDate() + deepCleanInterval);
-
-    while (currentDate < checkOutDate) {
       tasks.push({
-        type: 'deep_cleaning',
+        type: 'stay_over',
         date: new Date(currentDate)
       });
-      currentDate.setDate(currentDate.getDate() + deepCleanInterval);
+      currentDate.setDate(currentDate.getDate() + stayOverInterval);
     }
   }
 

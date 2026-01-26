@@ -213,9 +213,13 @@ export async function handleDamageReportMedia(ctx, type, data) {
  */
 export async function completeTask(ctx, taskId) {
   const contact = ctx.contact;
+  const { showMyActiveTasks } = await import('./housekeeping-menu.js');
 
+  const client = await pool.connect();
   try {
-    const result = await pool.query(
+    await client.query('BEGIN');
+
+    const result = await client.query(
       `UPDATE cleaning_tasks
        SET status = 'completed',
            completed_at = NOW(),
@@ -225,21 +229,45 @@ export async function completeTask(ctx, taskId) {
          AND tenant_id = $2
          AND assigned_to = $3
          AND status = 'in_progress'
-       RETURNING id, task_type`,
+       RETURNING id, task_type, property_id`,
       [taskId, contact.tenant_id, contact.user_id]
     );
 
     if (result.rows.length === 0) {
+      await client.query('ROLLBACK');
       await ctx.answerCbQuery('❌ No puedes completar esta tarea');
       await showMyActiveTasks(ctx);
       return;
     }
 
+    const task = result.rows[0];
+
+    // Update property cleaning counter based on task type
+    if (task.task_type === 'check_out') {
+      // Increment counter for regular check_out
+      await client.query(
+        'UPDATE properties SET cleaning_count = cleaning_count + 1 WHERE id = $1',
+        [task.property_id]
+      );
+    } else if (task.task_type === 'deep_cleaning') {
+      // Reset counter for deep_cleaning
+      await client.query(
+        'UPDATE properties SET cleaning_count = 0 WHERE id = $1',
+        [task.property_id]
+      );
+    }
+    // stay_over tasks don't affect the counter
+
+    await client.query('COMMIT');
+
     await ctx.answerCbQuery('✅ ¡Tarea completada! 👏');
     await showMyActiveTasks(ctx);
   } catch (error) {
+    await client.query('ROLLBACK');
     console.error('Error completing task:', error);
     await ctx.answerCbQuery('❌ Error al completar la tarea');
+  } finally {
+    client.release();
   }
 }
 
