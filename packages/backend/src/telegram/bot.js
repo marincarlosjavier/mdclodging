@@ -25,6 +25,21 @@ import {
   showHousekeepingStaff,
   assignTaskToStaff
 } from './admin-handlers.js';
+import {
+  showHousekeepingMenu,
+  showTasksToday,
+  showMyActiveTasks,
+  showDailySummary,
+  showTasksTomorrow,
+  showHousekeepingHelp
+} from './housekeeping-menu.js';
+import {
+  takeTask,
+  startTask as hkStartTask,
+  completeTask as hkCompleteTask,
+  showSuppliesMenu,
+  requestSupply
+} from './housekeeping-actions.js';
 
 let bot = null;
 let lastError = null; // Store last error for status reporting
@@ -531,39 +546,61 @@ async function showMainMenu(ctx, contact) {
   );
 
   const permissions = permRows.map(p => p.code);
-  const hasHousekeeping = permissions.includes('housekeeping');
-  const hasAdmin = permissions.includes('admin');
 
-  const buttons = [
-    [Markup.button.callback('📋 Mis Tareas', 'my_tasks')],
-    [Markup.button.callback('✅ Tareas Pendientes', 'pending_tasks')]
-  ];
-
-  // Add cleaning tasks button if user has housekeeping permission
-  if (hasHousekeeping) {
-    buttons.push([Markup.button.callback('🧹 Tareas de Limpieza', 'cleaning_tasks')]);
+  // If user has only one permission, go directly to that module
+  if (permissions.length === 1) {
+    if (permissions[0] === 'housekeeping') {
+      return await showHousekeepingMenu(ctx);
+    }
+    // Add other modules here (admin, mantenimiento, etc.)
   }
 
-  // Add task assignment button for admin permission
-  if (hasAdmin) {
-    buttons.push([Markup.button.callback('👥 Asignar Tareas', 'assign_tasks')]);
+  // If user has multiple permissions, show module selector
+  if (permissions.length > 1) {
+    return await showModuleSelector(ctx, permissions);
   }
 
-  buttons.push(
-    [Markup.button.callback('📊 Mi Resumen', 'my_summary')],
-    [Markup.button.callback('❓ Ayuda', 'help')],
-    [Markup.button.callback('🚪 Cerrar Sesión', 'logout')]
+  // No permissions - show error
+  return ctx.reply(
+    '⛔ *Sin Permisos*\n\n' +
+    'No tienes permisos asignados en el sistema.\n\n' +
+    'Por favor contacta a tu supervisor.',
+    { parse_mode: 'Markdown' }
   );
+}
+
+/**
+ * Show module selector for users with multiple permissions
+ */
+async function showModuleSelector(ctx, permissions) {
+  const buttons = [];
+
+  if (permissions.includes('housekeeping')) {
+    buttons.push([Markup.button.callback('🧹 Housekeeping', 'module_housekeeping')]);
+  }
+  if (permissions.includes('admin')) {
+    buttons.push([Markup.button.callback('👨‍💼 Administración', 'module_admin')]);
+  }
+  if (permissions.includes('mantenimiento')) {
+    buttons.push([Markup.button.callback('🔧 Mantenimiento', 'module_mantenimiento')]);
+  }
+  if (permissions.includes('concesion')) {
+    buttons.push([Markup.button.callback('🛎️ Concesión', 'module_concesion')]);
+  }
+
+  buttons.push([Markup.button.callback('🚪 Salir', 'logout')]);
 
   const keyboard = Markup.inlineKeyboard(buttons);
 
-  await ctx.reply(
+  const message =
     `🏨 *Sistema de Gestión Hotelera*\n\n` +
-    `Bienvenido, *${user.full_name}*!\n` +
-    `Rol: ${getRoleDisplayName(user.role)}\n\n` +
-    `Selecciona una opción:`,
-    { parse_mode: 'Markdown', ...keyboard }
-  );
+    `Selecciona el módulo al que deseas acceder:`;
+
+  if (ctx.callbackQuery) {
+    await ctx.editMessageText(message, { parse_mode: 'Markdown', ...keyboard });
+  } else {
+    await ctx.reply(message, { parse_mode: 'Markdown', ...keyboard });
+  }
 }
 
 /**
@@ -572,7 +609,57 @@ async function showMainMenu(ctx, contact) {
 async function handleCallback(ctx) {
   const action = ctx.callbackQuery.data;
 
-  // Cleaning tasks callbacks (don't answer query yet, handlers will do it)
+  // Module selection
+  if (action === 'module_housekeeping') {
+    return await showHousekeepingMenu(ctx);
+  } else if (action === 'switch_module') {
+    // Get permissions and show selector
+    const { rows: permRows } = await pool.query(
+      `SELECT tpc.code
+       FROM telegram_contact_permissions tcp
+       JOIN telegram_permissions_catalog tpc ON tpc.id = tcp.permission_id
+       WHERE tcp.contact_id = $1 AND tpc.is_active = true`,
+      [ctx.contact.id]
+    );
+    const permissions = permRows.map(p => p.code);
+    return await showModuleSelector(ctx, permissions);
+  }
+
+  // Housekeeping menu callbacks
+  if (action === 'hk_menu') {
+    return await showHousekeepingMenu(ctx);
+  } else if (action === 'hk_tasks_today') {
+    return await showTasksToday(ctx);
+  } else if (action === 'hk_my_active_tasks') {
+    return await showMyActiveTasks(ctx);
+  } else if (action === 'hk_daily_summary') {
+    return await showDailySummary(ctx);
+  } else if (action === 'hk_settlement') {
+    return await showSettlementStatus(ctx);
+  } else if (action === 'hk_tasks_tomorrow') {
+    return await showTasksTomorrow(ctx);
+  } else if (action === 'hk_order_supplies') {
+    return await showSuppliesMenu(ctx);
+  } else if (action === 'hk_help') {
+    return await showHousekeepingHelp(ctx);
+  }
+
+  // Housekeeping task actions
+  if (action.startsWith('hk_take_')) {
+    const taskId = action.split('_')[2];
+    return await takeTask(ctx, taskId);
+  } else if (action.startsWith('hk_start_')) {
+    const taskId = action.split('_')[2];
+    return await hkStartTask(ctx, taskId);
+  } else if (action.startsWith('hk_complete_')) {
+    const taskId = action.split('_')[2];
+    return await hkCompleteTask(ctx, taskId);
+  } else if (action.startsWith('hk_supply_')) {
+    const supplyCode = action.replace('hk_supply_', '');
+    return await requestSupply(ctx, supplyCode);
+  }
+
+  // Old cleaning tasks callbacks (don't answer query yet, handlers will do it)
   if (action.startsWith('take_task_')) {
     const taskId = action.split('_')[2];
     return await handleTakeTask(ctx, taskId);
