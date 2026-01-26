@@ -65,8 +65,7 @@ export async function showTasksToday(ctx) {
 
   // Calculate today based on Colombia timezone
   const now = new Date();
-  const colombiaTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/Bogota' }));
-  const today = colombiaTime.toISOString().split('T')[0];
+  const today = now.toLocaleDateString('en-CA', { timeZone: 'America/Bogota' }); // YYYY-MM-DD format
 
   const { rows } = await pool.query(
     `SELECT
@@ -279,8 +278,7 @@ export async function showDailySummary(ctx) {
 
   // Calculate today based on Colombia timezone
   const now = new Date();
-  const colombiaTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/Bogota' }));
-  const today = colombiaTime.toISOString().split('T')[0];
+  const today = now.toLocaleDateString('en-CA', { timeZone: 'America/Bogota' }); // YYYY-MM-DD format
 
   const { rows } = await pool.query(
     `SELECT
@@ -342,9 +340,9 @@ export async function showTasksTomorrow(ctx) {
 
   // Calculate tomorrow based on Colombia timezone
   const now = new Date();
-  const colombiaTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/Bogota' }));
-  const tomorrow = new Date(colombiaTime);
-  tomorrow.setDate(tomorrow.getDate() + 1);
+  const colombiaDateStr = now.toLocaleDateString('en-CA', { timeZone: 'America/Bogota' }); // YYYY-MM-DD
+  const [year, month, day] = colombiaDateStr.split('-').map(Number);
+  const tomorrow = new Date(year, month - 1, day + 1);
   const tomorrowDate = tomorrow.toISOString().split('T')[0];
 
   const { rows } = await pool.query(
