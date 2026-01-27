@@ -1,0 +1,203 @@
+name: Deploy to Production
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to deploy (e.g., v1.0.0)'
+        required: true
+        type: string
+
+jobs:
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://app.mdclodging.com
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.version || github.ref }}
+
+      - name: Verify version tag
+        run: |
+          if [[ "${{ github.ref }}" =~ ^refs/tags/v[0-9]+\.[0-9]+\.[0-9]+$ ]] || \
+             [[ "${{ github.event.inputs.version }}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "✅ Valid version tag"
+          else
+            echo "❌ Invalid version tag format. Must be vX.Y.Z"
+            exit 1
+          fi
+
+      - name: Create deployment record
+        run: |
+          VERSION="${{ github.event.inputs.version || github.ref_name }}"
+          echo "📝 Recording deployment: $VERSION"
+          echo "Deployed at: $(date -u +"%Y-%m-%d %H:%M:%S UTC")"
+          echo "Commit: ${{ github.sha }}"
+
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.PROD_SSH_KEY }}" > ~/.ssh/prod_key
+          chmod 600 ~/.ssh/prod_key
+          ssh-keyscan -H ${{ secrets.PROD_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Pre-deployment backup
+        run: |
+          echo "💾 Creating pre-deployment backup..."
+          ssh -i ~/.ssh/prod_key ${{ secrets.PROD_USER }}@${{ secrets.PROD_HOST }} << 'EOF'
+            cd /opt/mdclodging
+            BACKUP_NAME="pre-deploy-$(date +%Y%m%d-%H%M%S)"
+
+            # Backup database
+            docker exec mdclodging_postgres pg_dump -U postgres -Fc mdclodging > "/backups/db_${BACKUP_NAME}.dump"
+            gzip "/backups/db_${BACKUP_NAME}.dump"
+
+            # Backup current code
+            tar -czf "/backups/code_${BACKUP_NAME}.tar.gz" --exclude=node_modules --exclude=.git .
+
+            echo "✅ Backup created: ${BACKUP_NAME}"
+          EOF
+
+      - name: Deploy to production server
+        run: |
+          ssh -i ~/.ssh/prod_key ${{ secrets.PROD_USER }}@${{ secrets.PROD_HOST }} << 'EOF'
+            set -e
+            cd /opt/mdclodging
+
+            echo "📥 Pulling production code..."
+            git fetch --tags origin
+            VERSION="${{ github.event.inputs.version || github.ref_name }}"
+            git checkout "$VERSION"
+
+            echo "📦 Installing dependencies..."
+            pnpm install --frozen-lockfile --prod
+
+            echo "🔧 Building frontend..."
+            cd packages/frontend
+            npm run build
+            cd ../..
+
+            echo "🗄️ Running database migrations..."
+            cd packages/backend
+            node src/database/migrate.js
+            cd ../..
+
+            echo "🐳 Updating Docker containers..."
+            docker-compose -f docker-compose.prod.yml pull
+            docker-compose -f docker-compose.prod.yml up -d --build --no-deps backend frontend
+
+            echo "⏳ Waiting for containers to stabilize..."
+            sleep 20
+
+            echo "🧹 Cleaning up old images..."
+            docker image prune -f
+
+            echo "✅ Production deployment complete!"
+          EOF
+
+      - name: Health check
+        run: |
+          echo "🏥 Running production health check..."
+          sleep 30
+
+          for i in {1..15}; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://api.mdclodging.com/health || echo "000")
+
+            if [ "$STATUS" = "200" ]; then
+              echo "✅ Health check passed (attempt $i)"
+
+              # Verify database connection
+              HEALTH_BODY=$(curl -s https://api.mdclodging.com/health)
+              if echo "$HEALTH_BODY" | grep -q '"status":"ok"'; then
+                echo "✅ Database connection verified"
+                exit 0
+              fi
+            fi
+
+            echo "⏳ Health check failed (attempt $i), status: $STATUS"
+            sleep 15
+          done
+
+          echo "❌ Health check failed after 15 attempts"
+          exit 1
+
+      - name: Run production smoke tests
+        run: |
+          echo "🧪 Running production smoke tests..."
+
+          # Test API endpoints
+          curl -f https://api.mdclodging.com/api || exit 1
+          curl -f https://api.mdclodging.com/health || exit 1
+
+          # Test frontend
+          curl -f https://app.mdclodging.com || exit 1
+
+          # Test authentication endpoint (should return 400/401, not 500)
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://api.mdclodging.com/api/auth/login)
+          if [ "$STATUS" = "400" ] || [ "$STATUS" = "401" ]; then
+            echo "✅ Auth endpoint responding correctly"
+          else
+            echo "❌ Auth endpoint returned: $STATUS"
+            exit 1
+          fi
+
+          echo "✅ All smoke tests passed"
+
+      - name: Verify metrics endpoint
+        run: |
+          echo "📊 Checking metrics endpoint..."
+          curl -s https://api.mdclodging.com/metrics | grep -q "http_requests_total" && \
+            echo "✅ Metrics endpoint working" || \
+            echo "⚠️ Metrics endpoint not responding (non-critical)"
+
+      - name: Notify deployment success
+        if: success()
+        run: |
+          VERSION="${{ github.event.inputs.version || github.ref_name }}"
+          echo "✅ Production deployment successful: $VERSION"
+          echo "🚀 Application is live at https://app.mdclodging.com"
+
+      - name: Rollback on failure
+        if: failure()
+        run: |
+          echo "⚠️ Deployment failed, initiating rollback..."
+          ssh -i ~/.ssh/prod_key ${{ secrets.PROD_USER }}@${{ secrets.PROD_HOST }} << 'EOF'
+            cd /opt/mdclodging
+
+            # Find most recent backup
+            LATEST_BACKUP=$(ls -t /backups/code_pre-deploy-*.tar.gz | head -1)
+
+            if [ -n "$LATEST_BACKUP" ]; then
+              echo "🔙 Restoring from backup: $LATEST_BACKUP"
+              tar -xzf "$LATEST_BACKUP"
+              docker-compose -f docker-compose.prod.yml up -d --build
+
+              # Restore database if needed
+              # DB_BACKUP="${LATEST_BACKUP/code/db}"
+              # DB_BACKUP="${DB_BACKUP/.tar.gz/.dump.gz}"
+              # gunzip -c "$DB_BACKUP" | docker exec -i mdclodging_postgres pg_restore -U postgres -d mdclodging --clean
+
+              echo "✅ Rollback complete"
+            else
+              echo "❌ No backup found for rollback"
+              exit 1
+            fi
+          EOF
+
+          echo "🔙 Rollback completed"
+          exit 1
+
+      - name: Tag deployment in monitoring
+        if: success()
+        run: |
+          VERSION="${{ github.event.inputs.version || github.ref_name }}"
+          echo "📊 Tagging deployment in monitoring systems..."
+          # Add Sentry release tracking, etc.

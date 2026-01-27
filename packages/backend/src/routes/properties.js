@@ -2,6 +2,7 @@ import express from 'express';
 import { pool } from '../config/database.js';
 import { authenticate, requireRole } from '../middleware/auth.js';
 import { asyncHandler } from '../middleware/error.js';
+import { checkPropertyQuota } from '../middleware/quota.js';
 
 const router = express.Router();
 router.use(authenticate);
@@ -82,7 +83,7 @@ router.get('/:id', asyncHandler(async (req, res) => {
 }));
 
 // POST /api/properties - Create single property manually
-router.post('/', requireRole('admin', 'supervisor'), asyncHandler(async (req, res) => {
+router.post('/', requireRole('admin', 'supervisor'), checkPropertyQuota, asyncHandler(async (req, res) => {
   const { property_type_id, name, status, notes } = req.body;
 
   if (!property_type_id || !name) {

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Calendar, Clock, Users, CheckCircle, AlertCircle, XCircle, Loader, LogOut, X, Edit, Play, Timer } from 'lucide-react';
+import { Calendar, Clock, Users, CheckCircle, AlertCircle, XCircle, Loader, LogOut, X, Edit, Play, Timer, RefreshCw } from 'lucide-react';
 import { useDispatch } from 'react-redux';
 import { updateReservation } from '../store/slices/reservationsSlice';
 import { toast } from 'react-toastify';
@@ -29,6 +29,13 @@ export default function CheckoutReport() {
   useEffect(() => {
     fetchTenantSettings();
     fetchReport();
+
+    // Auto-refresh every 30 seconds to catch updates from Telegram
+    const refreshInterval = setInterval(() => {
+      fetchReport();
+    }, 30000); // 30 seconds
+
+    return () => clearInterval(refreshInterval);
   }, [date, statusFilters]);
 
   const fetchTenantSettings = async () => {
@@ -349,7 +356,7 @@ export default function CheckoutReport() {
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 print:hidden">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Reporte de Checkouts</h1>
-          <p className="text-gray-600">Control de salidas y limpieza</p>
+          <p className="text-gray-600">Control de salidas y limpieza • Auto-actualización cada 30s</p>
         </div>
         <div className="flex gap-3 items-center">
           <input
@@ -358,6 +365,16 @@ export default function CheckoutReport() {
             onChange={(e) => setDate(e.target.value)}
             className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
           />
+
+          <button
+            onClick={fetchReport}
+            disabled={loading}
+            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition"
+            title="Refrescar para ver cambios de Telegram"
+          >
+            <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
+            Refrescar
+          </button>
 
           <button
             onClick={handlePrint}
@@ -522,7 +539,7 @@ export default function CheckoutReport() {
                       {checkout.reference || '-'}
                     </td>
                     <td className="px-2 py-3 whitespace-nowrap text-xs text-gray-600">
-                      {checkout.cleaning_task_type === 'check_out' ? 'Aseo General' :
+                      {checkout.cleaning_task_type === 'check_out' ? 'Aseo Completo' :
                        checkout.cleaning_task_type === 'stay_over' ? 'Aseo Liviano' :
                        checkout.cleaning_task_type === 'deep_cleaning' ? 'Aseo Profundo' :
                        checkout.cleaning_task_type || '-'}

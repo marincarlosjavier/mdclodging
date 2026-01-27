@@ -122,10 +122,16 @@ router.post('/stop', requireAdmin, asyncHandler(async (req, res) => {
  * Generate linking code for user
  */
 router.post('/generate-link-code', requireSupervisor, asyncHandler(async (req, res) => {
-  const { user_id } = req.body;
+  const { user_id, permission_ids } = req.body;
 
   if (!user_id) {
     return res.status(400).json({ error: 'user_id is required' });
+  }
+
+  if (!permission_ids || !Array.isArray(permission_ids) || permission_ids.length === 0) {
+    return res.status(400).json({
+      error: 'Debes seleccionar al menos un permiso de Telegram antes de generar el código'
+    });
   }
 
   // Verify user belongs to same tenant
@@ -136,6 +142,19 @@ router.post('/generate-link-code', requireSupervisor, asyncHandler(async (req, r
 
   if (userCheck.rows.length === 0) {
     return res.status(404).json({ error: 'User not found' });
+  }
+
+  // Verify all permissions exist and are active
+  const permissionsCheck = await pool.query(
+    `SELECT id, code, name FROM telegram_permissions_catalog
+     WHERE id = ANY($1) AND is_active = true`,
+    [permission_ids]
+  );
+
+  if (permissionsCheck.rows.length !== permission_ids.length) {
+    return res.status(400).json({
+      error: 'Uno o más permisos seleccionados son inválidos o están inactivos'
+    });
   }
 
   // Check if user already has an active code
@@ -157,15 +176,16 @@ router.post('/generate-link-code', requireSupervisor, asyncHandler(async (req, r
   const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 
   await pool.query(
-    `INSERT INTO telegram_link_codes (tenant_id, user_id, code, expires_at, created_by)
-     VALUES ($1, $2, $3, $4, $5)`,
-    [req.tenantId, user_id, code, expiresAt, req.user.id]
+    `INSERT INTO telegram_link_codes (tenant_id, user_id, code, expires_at, created_by, pending_permissions)
+     VALUES ($1, $2, $3, $4, $5, $6)`,
+    [req.tenantId, user_id, code, expiresAt, req.user.id, permission_ids]
   );
 
   res.json({
     code,
     expires_at: expiresAt,
-    user: userCheck.rows[0]
+    user: userCheck.rows[0],
+    pending_permissions: permissionsCheck.rows
   });
 }));
 

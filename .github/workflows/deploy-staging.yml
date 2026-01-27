@@ -1,0 +1,112 @@
+name: Deploy to Staging
+
+on:
+  push:
+    branches:
+      - develop
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy to Staging Environment
+    runs-on: ubuntu-latest
+    environment:
+      name: staging
+      url: https://staging.mdclodging.com
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.STAGING_SSH_KEY }}" > ~/.ssh/staging_key
+          chmod 600 ~/.ssh/staging_key
+          ssh-keyscan -H ${{ secrets.STAGING_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Deploy to staging server
+        run: |
+          ssh -i ~/.ssh/staging_key ${{ secrets.STAGING_USER }}@${{ secrets.STAGING_HOST }} << 'EOF'
+            set -e
+            cd /opt/mdclodging-staging
+
+            echo "📥 Pulling latest code..."
+            git fetch origin
+            git checkout develop
+            git pull origin develop
+
+            echo "📦 Installing dependencies..."
+            pnpm install --frozen-lockfile
+
+            echo "🔧 Building frontend..."
+            cd packages/frontend
+            npm run build
+            cd ../..
+
+            echo "🗄️ Running database migrations..."
+            cd packages/backend
+            node src/database/migrate.js
+            cd ../..
+
+            echo "🐳 Restarting Docker containers..."
+            docker-compose -f docker-compose.staging.yml pull
+            docker-compose -f docker-compose.staging.yml up -d --build
+
+            echo "🧹 Cleaning up old images..."
+            docker image prune -f
+
+            echo "✅ Staging deployment complete!"
+          EOF
+
+      - name: Health check
+        run: |
+          echo "🏥 Running health check..."
+          sleep 30
+
+          for i in {1..10}; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://api-staging.mdclodging.com/health || echo "000")
+
+            if [ "$STATUS" = "200" ]; then
+              echo "✅ Health check passed (attempt $i)"
+              exit 0
+            fi
+
+            echo "⏳ Health check failed (attempt $i), status: $STATUS"
+            sleep 10
+          done
+
+          echo "❌ Health check failed after 10 attempts"
+          exit 1
+
+      - name: Run smoke tests
+        run: |
+          echo "🧪 Running smoke tests..."
+
+          # Test API info endpoint
+          curl -f https://api-staging.mdclodging.com/api || exit 1
+
+          # Test frontend
+          curl -f https://staging.mdclodging.com || exit 1
+
+          echo "✅ Smoke tests passed"
+
+      - name: Notify deployment
+        if: always()
+        run: |
+          if [ "${{ job.status }}" = "success" ]; then
+            echo "✅ Staging deployment successful"
+          else
+            echo "❌ Staging deployment failed"
+          fi
+
+      - name: Rollback on failure
+        if: failure()
+        run: |
+          echo "⚠️ Deployment failed, rolling back..."
+          ssh -i ~/.ssh/staging_key ${{ secrets.STAGING_USER }}@${{ secrets.STAGING_HOST }} << 'EOF'
+            cd /opt/mdclodging-staging
+            git reset --hard HEAD~1
+            docker-compose -f docker-compose.staging.yml up -d --build
+          EOF
+          echo "🔙 Rollback complete"

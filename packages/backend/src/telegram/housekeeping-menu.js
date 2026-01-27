@@ -114,6 +114,7 @@ export async function showTasksPending(ctx) {
       r.adults,
       r.children,
       r.infants,
+      r.reference,
       p.name as property_name,
       ct.id as cleaning_task_id,
       ct.task_type,
@@ -222,8 +223,11 @@ async function showTaskDetail(ctx, tasks, index, context = 'pending') {
     }
 
     message += `${priorityFlag}*${task.property_name}*\n`;
-    message += `🔖 Reserva #${task.reservation_id}\n\n`;
-    message += `${taskTypeEmoji} *${taskTypeName}*\n`;
+    message += `🔖 Reserva #${task.reservation_id}\n`;
+    if (task.reference) {
+      message += `📝 Ref: ${task.reference}\n`;
+    }
+    message += `\n${taskTypeEmoji} *${taskTypeName}*\n`;
     message += `🕐 ${timeStr}\n`;
     message += `👥 Huéspedes: ${totalGuests}\n`;
     message += `\n📊 Estado: ${statusText}`;
@@ -274,11 +278,13 @@ export async function showMyActiveTasks(ctx) {
       ct.started_at,
       ct.is_priority,
       ct.scheduled_date,
+      r.id as reservation_id,
       r.actual_checkout_time,
       r.checkout_time,
       r.adults,
       r.children,
       r.infants,
+      r.reference,
       p.name as property_name
      FROM cleaning_tasks ct
      JOIN reservations r ON r.id = ct.reservation_id
@@ -337,8 +343,12 @@ async function showActiveTaskDetail(ctx, tasks, index) {
   const statusText = task.status === 'in_progress' ? '⚙️ EN PROGRESO' : '📌 PENDIENTE';
 
   let message = `📋 *MI TAREA ${index + 1}/${totalTasks}*\n\n`;
-  message += `${priorityFlag}*${task.property_name}*\n\n`;
-  message += `${taskTypeEmoji} *${taskTypeName}*\n`;
+  message += `${priorityFlag}*${task.property_name}*\n`;
+  message += `🔖 Reserva #${task.reservation_id}\n`;
+  if (task.reference) {
+    message += `📝 Ref: ${task.reference}\n`;
+  }
+  message += `\n${taskTypeEmoji} *${taskTypeName}*\n`;
   message += `🕐 ${timeStr}\n`;
   message += `👥 Huéspedes: ${totalGuests}\n`;
   message += `\n📊 Estado: ${statusText}`;
@@ -388,13 +398,16 @@ export async function showDailySummary(ctx) {
 
   const { rows } = await pool.query(
     `SELECT
-      COUNT(*) FILTER (WHERE ct.status = 'completed') as completed,
+      COUNT(*) FILTER (WHERE ct.status = 'completed' AND DATE(ct.completed_at AT TIME ZONE 'America/Bogota') = $3) as completed,
       COUNT(*) FILTER (WHERE ct.status = 'in_progress') as in_progress,
-      COUNT(*) FILTER (WHERE ct.status = 'pending' AND ct.assigned_to = $2) as pending
+      COUNT(*) FILTER (WHERE ct.status = 'pending') as pending
      FROM cleaning_tasks ct
      WHERE ct.tenant_id = $1
        AND ct.assigned_to = $2
-       AND ct.scheduled_date = $3`,
+       AND (
+         (ct.status = 'completed' AND DATE(ct.completed_at AT TIME ZONE 'America/Bogota') = $3)
+         OR (ct.status IN ('in_progress', 'pending') AND ct.scheduled_date = $3)
+       )`,
     [contact.tenant_id, contact.user_id, today]
   );
 
@@ -403,14 +416,17 @@ export async function showDailySummary(ctx) {
     `SELECT
       ct.task_type,
       COUNT(*) as count,
-      tr.rate
+      cr.rate
      FROM cleaning_tasks ct
-     LEFT JOIN task_rates tr ON tr.tenant_id = ct.tenant_id AND tr.task_type = ct.task_type
+     LEFT JOIN properties p ON p.id = ct.property_id
+     LEFT JOIN cleaning_rates cr ON cr.tenant_id = ct.tenant_id
+       AND cr.property_type_id = p.property_type_id
+       AND cr.task_type = ct.task_type
      WHERE ct.tenant_id = $1
        AND ct.assigned_to = $2
        AND ct.status = 'completed'
        AND DATE(ct.completed_at AT TIME ZONE 'America/Bogota') = $3
-     GROUP BY ct.task_type, tr.rate`,
+     GROUP BY ct.task_type, cr.rate`,
     [contact.tenant_id, contact.user_id, today]
   );
 
@@ -455,11 +471,20 @@ export async function showTasksTomorrow(ctx) {
     `SELECT
       r.id as reservation_id,
       r.checkout_time,
+      r.adults,
+      r.children,
+      r.infants,
+      r.reference,
       p.name as property_name,
-      pt.name as property_type_name
+      pt.name as property_type_name,
+      ct.task_type,
+      ct.is_priority
      FROM reservations r
      JOIN properties p ON p.id = r.property_id
      JOIN property_types pt ON p.property_type_id = pt.id
+     LEFT JOIN cleaning_tasks ct ON ct.reservation_id = r.id
+       AND ct.status = 'pending'
+       AND ct.scheduled_date = $2
      WHERE r.tenant_id = $1
        AND r.check_out_date = $2
        AND r.status IN ('active', 'checked_in')
@@ -484,11 +509,20 @@ export async function showTasksTomorrow(ctx) {
 
   rows.forEach((task, index) => {
     const timeStr = task.checkout_time ? formatTime(task.checkout_time) : '';
+    const totalGuests = (task.adults || 0) + (task.children || 0) + (task.infants || 0);
+    const taskTypeEmoji = task.task_type ? getTaskTypeEmoji(task.task_type) : '🚪';
+    const taskTypeName = task.task_type ? getTaskTypeName(task.task_type) : 'Aseo Completo';
+    const priorityFlag = task.is_priority ? ' 🔴' : '';
 
-    message += `*${task.property_name}*\n`;
+    message += `*${task.property_name}*${priorityFlag}\n`;
     message += `🔖 Reserva #${task.reservation_id}\n`;
-    message += `🏠 ${task.property_type_name}`;
-    if (timeStr) message += ` | Salida: ${timeStr}`;
+    if (task.reference) {
+      message += `📝 Ref: ${task.reference}\n`;
+    }
+    message += `${taskTypeEmoji} ${taskTypeName}\n`;
+    message += `🏠 ${task.property_type_name}\n`;
+    if (timeStr) message += `🕐 Salida: ${timeStr}\n`;
+    message += `👥 Huéspedes: ${totalGuests}`;
 
     if (index < rows.length - 1) {
       message += '\n\n';
@@ -517,9 +551,9 @@ export async function showHousekeepingHelp(ctx) {
     `4️⃣ *Liquidación*\n` +
     `   Al final del día, envía tu liquidación para aprobación\n\n` +
     `*Tipos de limpieza:*\n` +
-    `🚪 CHECK OUT - Aseo completo\n` +
-    `🧹 STAY OVER - Aseo ligero\n` +
-    `🧼 DEEP CLEAN - Aseo profundo\n\n` +
+    `🚪 Aseo Completo (Checkout)\n` +
+    `🧹 Aseo Liviano (Stay over)\n` +
+    `🧼 Aseo Profundo (Deep clean)\n\n` +
     `🔴 Las tareas PRIORITARIAS aparecen marcadas`;
 
   await ctx.editMessageText(message, {
@@ -540,9 +574,9 @@ function getTaskTypeEmoji(taskType) {
 
 function getTaskTypeName(taskType) {
   const names = {
-    check_out: 'CHECK OUT',
-    stay_over: 'STAY OVER',
-    deep_cleaning: 'DEEP CLEANING'
+    check_out: 'Aseo Completo',
+    stay_over: 'Aseo Liviano',
+    deep_cleaning: 'Aseo Profundo'
   };
   return names[taskType] || taskType;
 }
@@ -574,7 +608,7 @@ export async function showArrivals(ctx) {
 
     const { rows } = await pool.query(
       `SELECT r.id as reservation_id, r.checkin_time, r.check_in_date,
-              r.adults, r.children, r.infants,
+              r.adults, r.children, r.infants, r.status,
               p.name as property_name, pt.name as property_type_name,
               r.reference
        FROM reservations r
@@ -647,7 +681,7 @@ export async function showArrivalsTomorrow(ctx) {
 
     const { rows } = await pool.query(
       `SELECT r.id as reservation_id, r.checkin_time, r.check_in_date,
-              r.adults, r.children, r.infants,
+              r.adults, r.children, r.infants, r.status,
               p.name as property_name, pt.name as property_type_name,
               r.reference
        FROM reservations r
@@ -678,8 +712,9 @@ export async function showArrivalsTomorrow(ctx) {
     rows.forEach((arrival, index) => {
       const timeStr = arrival.checkin_time ? formatTime(arrival.checkin_time) : 'Por definir';
       const totalGuests = (arrival.adults || 0) + (arrival.children || 0) + (arrival.infants || 0);
+      const statusIcon = arrival.status === 'checked_in' ? '✅' : '⏳';
 
-      message += `*${arrival.property_name}*\n`;
+      message += `${statusIcon} *${arrival.property_name}*\n`;
       message += `🔖 Reserva #${arrival.reservation_id}\n`;
       message += `🕐 Hora: ${timeStr}\n`;
       message += `👥 Huéspedes: ${totalGuests}\n`;

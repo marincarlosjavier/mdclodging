@@ -1,6 +1,7 @@
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+import { checkStorageQuota } from './quota.js';
 
 // Ensure upload directory exists
 const uploadDir = process.env.UPLOAD_DIR || './uploads';
@@ -53,7 +54,7 @@ const excelFilter = (req, file, cb) => {
 };
 
 // Configure multer for images
-export const uploadImage = multer({
+const uploadImageMulter = multer({
   storage: storage,
   fileFilter: imageFilter,
   limits: {
@@ -62,13 +63,58 @@ export const uploadImage = multer({
 });
 
 // Configure multer for Excel files
-export const uploadExcel = multer({
+const uploadExcelMulter = multer({
   storage: storage,
   fileFilter: excelFilter,
   limits: {
     fileSize: parseInt(process.env.MAX_FILE_SIZE || '5242880') // 5MB default
   }
 });
+
+// Wrap multer with quota check
+// Quota check runs AFTER multer processes file, so we can check file size
+// If quota exceeded, uploaded file is deleted and error returned
+export const uploadImage = [
+  uploadImageMulter.single('image'),
+  async (req, res, next) => {
+    if (req.file) {
+      // Check quota after file upload
+      try {
+        await checkStorageQuota(req, res, () => {
+          // Quota OK, continue
+          next();
+        });
+      } catch (error) {
+        // Quota exceeded or error, delete uploaded file
+        if (req.file.path) {
+          deleteFile(req.file.path);
+        }
+        // Error already sent by checkStorageQuota
+      }
+    } else {
+      next();
+    }
+  }
+];
+
+export const uploadExcel = [
+  uploadExcelMulter.single('file'),
+  async (req, res, next) => {
+    if (req.file) {
+      try {
+        await checkStorageQuota(req, res, () => {
+          next();
+        });
+      } catch (error) {
+        if (req.file.path) {
+          deleteFile(req.file.path);
+        }
+      }
+    } else {
+      next();
+    }
+  }
+];
 
 // Error handler for multer
 export function handleUploadError(err, req, res, next) {

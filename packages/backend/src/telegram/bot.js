@@ -7,7 +7,8 @@ import {
   handleStartTask,
   handleCompleteTask,
   showSettlementStatus,
-  handleReportSettlement
+  handleReportSettlement,
+  handleConfirmReportSettlement
 } from './cleaning-handlers.js';
 import {
   showAdminMenu,
@@ -428,23 +429,45 @@ async function handleLinkCode(ctx, code) {
 
   if (rows.length === 0) {
     return ctx.reply(
-      '❌ Código inválido o expirado.\n\n' +
-      'Verifica el código e intenta nuevamente, o solicita uno nuevo a tu supervisor.'
+      '❌ *Código inválido o expirado*\n\n' +
+      '🔍 Verifica que:\n' +
+      '• El código esté en *MAYÚSCULAS*\n' +
+      '• No hayan pasado más de 24 horas desde su generación\n' +
+      '• No hayas cometido errores al escribirlo\n\n' +
+      '💡 Solicita un nuevo código a tu supervisor si es necesario.\n\n' +
+      `Código ingresado: \`${cleanCode}\``,
+      { parse_mode: 'Markdown' }
     );
   }
 
   const linkData = rows[0];
 
   // Link contact to user
-  await pool.query(
+  const contactResult = await pool.query(
     `UPDATE telegram_contacts SET
       user_id = $1,
       tenant_id = $2,
       linked_at = NOW(),
+      is_linked = true,
       updated_at = NOW()
-     WHERE telegram_id = $3`,
+     WHERE telegram_id = $3
+     RETURNING id`,
     [linkData.user_id, linkData.tenant_id, ctx.telegramId]
   );
+
+  const contactId = contactResult.rows[0].id;
+
+  // Assign pending permissions automatically
+  if (linkData.pending_permissions && linkData.pending_permissions.length > 0) {
+    for (const permissionId of linkData.pending_permissions) {
+      await pool.query(
+        `INSERT INTO telegram_contact_permissions (contact_id, permission_id)
+         VALUES ($1, $2)
+         ON CONFLICT (contact_id, permission_id) DO NOTHING`,
+        [contactId, permissionId]
+      );
+    }
+  }
 
   // Mark code as used
   await pool.query(
@@ -694,8 +717,17 @@ async function handleCallback(ctx) {
   } else if (action.startsWith('complete_task_')) {
     const taskId = action.split('_')[2];
     return await handleCompleteTask(ctx, taskId);
+  } else if (action.startsWith('abandon_task_')) {
+    const taskId = action.split('_')[2];
+    const { handleAbandonTask } = await import('./cleaning-handlers.js');
+    return await handleAbandonTask(ctx, taskId);
   } else if (action === 'report_settlement') {
     return await handleReportSettlement(ctx);
+  } else if (action === 'confirm_report_settlement') {
+    return await handleConfirmReportSettlement(ctx);
+  } else if (action === 'back_to_menu') {
+    await ctx.answerCbQuery();
+    return await showMainMenu(ctx, ctx.contact);
   }
 
   // Admin callbacks
@@ -753,7 +785,10 @@ async function handleCallback(ctx) {
       return await ctx.editMessageText(
         '👋 *Bienvenido al Sistema de Gestión Hotelera*\n\n' +
         'Para comenzar, necesitas vincular tu cuenta de Telegram.\n\n' +
-        '📝 Solicita un código de vinculación a tu administrador e ingrésalo aquí:',
+        '📝 Solicita un código de vinculación a tu administrador.\n\n' +
+        '⚠️ *IMPORTANTE:* El código debe enviarse en *MAYÚSCULAS*.\n' +
+        '(El código tiene 8 caracteres alfanuméricos)\n\n' +
+        'Ingresa el código aquí:',
         { parse_mode: 'Markdown' }
       );
     }
@@ -1244,7 +1279,7 @@ async function showMySummary(ctx) {
       COUNT(*) FILTER (WHERE status = 'completed') as completed,
       COUNT(*) FILTER (WHERE status = 'in_progress') as in_progress,
       COUNT(*) FILTER (WHERE status = 'pending') as pending
-     FROM tasks
+     FROM cleaning_tasks
      WHERE tenant_id = $1 AND assigned_to = $2`,
     [ctx.contact.tenant_id, ctx.contact.user_id]
   );
@@ -1358,22 +1393,36 @@ export async function notifyCheckout(tenantId, reservationData) {
     const priorityHeader = is_priority ? '🔴 *PRIORIDAD* 🔴\n' : '';
     const priorityFooter = is_priority ? '\n\n⚠️ *ATENCIÓN: Esta limpieza es PRIORITARIA*' : '';
 
+    const { task_type } = reservationData;
+    const taskTypeLabels = {
+      'check_out': '🚪 Aseo Completo (Checkout)',
+      'stay_over': '🧹 Aseo Liviano (Stay Over)',
+      'deep_cleaning': '🧼 Aseo Profundo'
+    };
+    const taskTypeLabel = taskTypeLabels[task_type] || task_type;
+
     const message =
       priorityHeader +
       `🚪 *CHECKOUT REPORTADO*\n\n` +
       `🔖 Reserva: #${reservation_id}\n` +
       `📍 Propiedad: *${property_name}*\n` +
+      `🧹 Tipo: ${taskTypeLabel}\n` +
       `🕐 Hora programada: ${scheduledTimeStr}\n` +
       `⏰ Hora real: ${actualTimeStr}\n` +
       `👥 Huéspedes: ${totalGuests}\n\n` +
       `La propiedad está disponible para limpieza.` +
       priorityFooter;
 
-    // Send to all housekeeping staff (without keyboard so it appears above menu)
+    // Send to all housekeeping staff with inline button
     for (const contact of result.rows) {
       try {
         await bot.telegram.sendMessage(contact.telegram_id, message, {
-          parse_mode: 'Markdown'
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: '📋 Ver Tareas Pendientes', callback_data: 'cleaning_pending_tasks' }]
+            ]
+          }
         });
       } catch (error) {
         console.error(`Failed to notify ${contact.telegram_id}:`, error.message);
@@ -1450,11 +1499,16 @@ export async function notifyCheckin(tenantId, reservationData) {
       `👥 Huéspedes: ${totalGuests}\n\n` +
       `Nuevos huéspedes han llegado a la propiedad.`;
 
-    // Send to all housekeeping staff
+    // Send to all housekeeping staff with inline button
     for (const contact of result.rows) {
       try {
         await bot.telegram.sendMessage(contact.telegram_id, message, {
-          parse_mode: 'Markdown'
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: '📋 Ver Tareas Pendientes', callback_data: 'cleaning_pending_tasks' }]
+            ]
+          }
         });
       } catch (error) {
         console.error(`Failed to notify ${contact.telegram_id}:`, error.message);

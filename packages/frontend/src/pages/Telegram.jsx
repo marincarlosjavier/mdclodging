@@ -21,6 +21,7 @@ export default function Telegram() {
   const [editingPermissions, setEditingPermissions] = useState(null); // { contactId, currentPermissions, fullName }
   const [selectedPermissions, setSelectedPermissions] = useState([]);
   const [permissionsCatalog, setPermissionsCatalog] = useState([]);
+  const [showPermissionModal, setShowPermissionModal] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -56,19 +57,32 @@ export default function Telegram() {
     }
   };
 
-  const handleGenerateCode = async () => {
+  const handleGenerateCode = () => {
     if (!selectedUser) {
       toast.error('Selecciona un usuario');
       return;
     }
 
+    // Show permission selection modal
+    setSelectedPermissions([]);
+    setShowPermissionModal(true);
+  };
+
+  const handleConfirmGenerateCode = async () => {
+    if (selectedPermissions.length === 0) {
+      toast.error('Debes seleccionar al menos un permiso');
+      return;
+    }
+
     try {
-      const response = await telegramAPI.generateLinkCode(selectedUser);
+      const response = await telegramAPI.generateLinkCode(selectedUser, selectedPermissions);
       const code = response.data;
 
       // Show modal with generated code
       setGeneratedCode(code);
-      setSelectedUser(''); // Clear selection
+      setSelectedUser('');
+      setSelectedPermissions([]);
+      setShowPermissionModal(false);
       fetchData();
     } catch (error) {
       // Error already handled
@@ -819,6 +833,68 @@ export default function Telegram() {
           </div>
         )}
       </div>
+
+      {/* Permission Selection Modal for Code Generation */}
+      {showPermissionModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4">
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Seleccionar Permisos de Telegram</h3>
+            <p className="text-xs text-gray-500 mb-4">
+              Estos permisos se asignarán automáticamente cuando el usuario se vincule
+            </p>
+
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-gray-700 mb-3">
+                Selecciona los permisos (mínimo 1)
+              </label>
+              <div className="space-y-3 max-h-96 overflow-y-auto">
+                {permissionsCatalog
+                  .filter(p => p.is_active)
+                  .map(permission => (
+                    <label
+                      key={permission.id}
+                      className={`flex items-start gap-3 p-3 border-2 rounded-lg cursor-pointer transition ${
+                        selectedPermissions.includes(permission.id)
+                          ? 'border-green-500 bg-green-50'
+                          : 'border-gray-200 hover:border-gray-300'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedPermissions.includes(permission.id)}
+                        onChange={() => handleTogglePermission(permission.id)}
+                        className="mt-1 w-4 h-4 text-green-600 rounded focus:ring-green-500"
+                      />
+                      <div className="flex-1">
+                        <div className="font-medium text-gray-900">{permission.name}</div>
+                        <div className="text-xs text-gray-500">{permission.description}</div>
+                      </div>
+                    </label>
+                  ))}
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={handleConfirmGenerateCode}
+                disabled={selectedPermissions.length === 0}
+                className="flex-1 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Generar Código
+              </button>
+              <button
+                onClick={() => {
+                  setShowPermissionModal(false);
+                  setSelectedPermissions([]);
+                }}
+                className="flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition font-medium"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

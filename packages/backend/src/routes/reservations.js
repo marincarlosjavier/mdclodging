@@ -3,6 +3,12 @@ import { pool } from '../config/database.js';
 import { authenticate, requireRole } from '../middleware/auth.js';
 import { asyncHandler } from '../middleware/error.js';
 import { notifyCheckout } from '../telegram/bot.js';
+import {
+  validateCreateReservation,
+  validateUpdateReservation,
+  validateReservationQuery,
+  validateReservationId
+} from '../middleware/validators/reservation.validators.js';
 
 const router = express.Router();
 router.use(authenticate);
@@ -65,7 +71,7 @@ async function generateCleaningTasks(client, reservation, tenantId, stayOverInte
 }
 
 // GET /api/reservations - List all reservations with filters
-router.get('/', asyncHandler(async (req, res) => {
+router.get('/', validateReservationQuery, asyncHandler(async (req, res) => {
   const { property_id, status, from_date, to_date } = req.query;
 
   let query = `
@@ -287,7 +293,7 @@ router.get('/breakfast-list', asyncHandler(async (req, res) => {
 }));
 
 // GET /api/reservations/:id - Get single reservation
-router.get('/:id', asyncHandler(async (req, res) => {
+router.get('/:id', validateReservationId, asyncHandler(async (req, res) => {
   const { id } = req.params;
 
   const result = await pool.query(
@@ -309,7 +315,7 @@ router.get('/:id', asyncHandler(async (req, res) => {
 }));
 
 // POST /api/reservations - Create new reservation
-router.post('/', requireRole('admin', 'supervisor'), asyncHandler(async (req, res) => {
+router.post('/', requireRole('admin', 'supervisor'), validateCreateReservation, asyncHandler(async (req, res) => {
   const {
     property_id,
     check_in_date,
@@ -324,18 +330,6 @@ router.post('/', requireRole('admin', 'supervisor'), asyncHandler(async (req, re
     additional_requirements,
     notes
   } = req.body;
-
-  if (!property_id || !check_in_date || !check_out_date) {
-    return res.status(400).json({ error: 'property_id, check_in_date, and check_out_date are required' });
-  }
-
-  // Validate dates
-  const checkIn = new Date(check_in_date);
-  const checkOut = new Date(check_out_date);
-
-  if (checkOut <= checkIn) {
-    return res.status(400).json({ error: 'Check-out date must be after check-in date' });
-  }
 
   const client = await pool.connect();
   try {
@@ -398,7 +392,7 @@ router.post('/', requireRole('admin', 'supervisor'), asyncHandler(async (req, re
 }));
 
 // PUT /api/reservations/:id - Update reservation
-router.put('/:id', requireRole('admin', 'supervisor'), asyncHandler(async (req, res) => {
+router.put('/:id', requireRole('admin', 'supervisor'), validateUpdateReservation, asyncHandler(async (req, res) => {
   const { id } = req.params;
   const {
     property_id,
@@ -605,7 +599,8 @@ router.put('/:id', requireRole('admin', 'supervisor'), asyncHandler(async (req, 
         adults: updatedReservation.adults,
         children: updatedReservation.children,
         infants: updatedReservation.infants,
-        is_priority: is_priority || false
+        is_priority: is_priority || false,
+        task_type: 'check_out'
       });
     }
 

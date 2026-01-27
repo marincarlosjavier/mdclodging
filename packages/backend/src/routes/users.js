@@ -4,6 +4,21 @@ import { pool } from '../config/database.js';
 import { authenticate, requireSupervisor, requireAdmin } from '../middleware/auth.js';
 import { asyncHandler } from '../middleware/error.js';
 import { v4 as uuidv4 } from 'uuid';
+import { VALID_ROLES, getRoleLabel, getRoleLabels } from '../constants/roles.js';
+import {
+  validateCreateUser,
+  validateUpdateUser,
+  validatePasswordChange,
+  validateUserId
+} from '../middleware/validators/user.validators.js';
+import { revokeUserTokens } from '../middleware/tokenBlacklist.js';
+import {
+  logUserCreated,
+  logUserDeleted,
+  logRoleChanged,
+  logPasswordChanged
+} from '../services/auditLogger.js';
+import { checkUserQuota } from '../middleware/quota.js';
 
 const router = express.Router();
 
@@ -59,7 +74,7 @@ router.get('/', requireSupervisor, asyncHandler(async (req, res) => {
  * GET /api/users/:id
  * Get single user
  */
-router.get('/:id', requireSupervisor, asyncHandler(async (req, res) => {
+router.get('/:id', requireSupervisor, validateUserId, asyncHandler(async (req, res) => {
   const { id } = req.params;
 
   const result = await pool.query(
@@ -80,22 +95,8 @@ router.get('/:id', requireSupervisor, asyncHandler(async (req, res) => {
  * POST /api/users
  * Create new user
  */
-router.post('/', requireSupervisor, asyncHandler(async (req, res) => {
+router.post('/', requireSupervisor, checkUserQuota, validateCreateUser, asyncHandler(async (req, res) => {
   const { email, password, full_name, role } = req.body;
-
-  // Validation
-  if (!email || !password || !full_name || !role) {
-    return res.status(400).json({
-      error: 'Missing required fields: email, password, full_name, role'
-    });
-  }
-
-  const validRoles = ['admin', 'supervisor', 'housekeeping', 'maintenance'];
-  if (!validRoles.includes(role)) {
-    return res.status(400).json({
-      error: `Invalid role. Allowed: ${validRoles.join(', ')}`
-    });
-  }
 
   // Only admins can create other admins
   if (role === 'admin' && req.user.role !== 'admin') {
@@ -111,8 +112,11 @@ router.post('/', requireSupervisor, asyncHandler(async (req, res) => {
       `INSERT INTO users (tenant_id, email, password_hash, full_name, role, api_token)
        VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING id, email, full_name, role, api_token, created_at`,
-      [req.tenantId, email, passwordHash, full_name, role, apiToken]
+      [req.tenantId, email, passwordHash, full_name, [role], apiToken]
     );
+
+    // Log user creation
+    await logUserCreated(req, result.rows[0].id, email, role);
 
     res.status(201).json(result.rows[0]);
   } catch (error) {
@@ -127,7 +131,7 @@ router.post('/', requireSupervisor, asyncHandler(async (req, res) => {
  * PUT /api/users/:id
  * Update user
  */
-router.put('/:id', requireSupervisor, asyncHandler(async (req, res) => {
+router.put('/:id', requireSupervisor, validateUpdateUser, asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { email, full_name, role, is_active } = req.body;
 
@@ -160,8 +164,19 @@ router.put('/:id', requireSupervisor, asyncHandler(async (req, res) => {
       updated_at = NOW()
     WHERE id = $5 AND tenant_id = $6
     RETURNING id, email, full_name, role, is_active, updated_at`,
-    [email, full_name, role, is_active, id, req.tenantId]
+    [email, full_name, role ? [role] : null, is_active, id, req.tenantId]
   );
+
+  // Log role change if role was updated
+  if (role && current.rows[0].role !== role) {
+    await logRoleChanged(
+      req,
+      parseInt(id),
+      result.rows[0].email,
+      current.rows[0].role,
+      role
+    );
+  }
 
   res.json(result.rows[0]);
 }));
@@ -170,7 +185,7 @@ router.put('/:id', requireSupervisor, asyncHandler(async (req, res) => {
  * PUT /api/users/:id/password
  * Change user password
  */
-router.put('/:id/password', asyncHandler(async (req, res) => {
+router.put('/:id/password', validatePasswordChange, asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { current_password, new_password } = req.body;
 
@@ -179,13 +194,9 @@ router.put('/:id/password', asyncHandler(async (req, res) => {
     return res.status(403).json({ error: 'Cannot change other users passwords' });
   }
 
-  if (!new_password || new_password.length < 6) {
-    return res.status(400).json({ error: 'Password must be at least 6 characters' });
-  }
-
   // Get current user
   const userResult = await pool.query(
-    'SELECT password_hash FROM users WHERE id = $1 AND tenant_id = $2',
+    'SELECT password_hash, email FROM users WHERE id = $1 AND tenant_id = $2',
     [id, req.tenantId]
   );
 
@@ -217,7 +228,16 @@ router.put('/:id/password', asyncHandler(async (req, res) => {
     [passwordHash, id, req.tenantId]
   );
 
-  res.json({ message: 'Password updated successfully' });
+  // Revoke all existing tokens for this user (force re-authentication)
+  await revokeUserTokens(parseInt(id), req.tenantId);
+
+  // Log password change
+  const userEmail = userResult.rows[0].email || 'unknown';
+  await logPasswordChanged(req, parseInt(id), userEmail);
+
+  res.json({
+    message: 'Password updated successfully. All sessions have been logged out.'
+  });
 }));
 
 /**
@@ -257,7 +277,7 @@ router.delete('/:id', requireAdmin, asyncHandler(async (req, res) => {
 
   // Check if user exists
   const current = await pool.query(
-    'SELECT id FROM users WHERE id = $1 AND tenant_id = $2',
+    'SELECT id, email FROM users WHERE id = $1 AND tenant_id = $2',
     [id, req.tenantId]
   );
 
@@ -270,6 +290,9 @@ router.delete('/:id', requireAdmin, asyncHandler(async (req, res) => {
     'UPDATE users SET is_active = false, updated_at = NOW() WHERE id = $1 AND tenant_id = $2',
     [id, req.tenantId]
   );
+
+  // Log user deletion
+  await logUserDeleted(req, parseInt(id), current.rows[0].email);
 
   res.json({ message: 'User deactivated successfully' });
 }));

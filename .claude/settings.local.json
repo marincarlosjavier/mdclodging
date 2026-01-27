@@ -65,7 +65,18 @@
       "Bash(TASKKILL //F //PID 272)",
       "Bash(TASKKILL //F //PID 11888)",
       "Bash(TASKKILL //F //PID 17100)",
-      "Bash(pkill:*)"
+      "Bash(pkill:*)",
+      "Bash(pnpm start)",
+      "Bash(cmd //c \"taskkill /F /PID 19916\")",
+      "Bash(cmd //c \"taskkill /F /PID 14148\")",
+      "Bash(cmd //c \"taskkill /F /PID 15336\")",
+      "Bash(pnpm add:*)",
+      "Bash(cmd //c \"taskkill /F /PID 20476\")",
+      "Bash(cmd //c \"taskkill /F /PID 12988\")",
+      "Bash(cmd //c \"taskkill /F /PID 7876\")",
+      "Bash(cmd //c \"taskkill /F /PID 6280\")",
+      "Bash(cmd //c \"taskkill /F /PID 7020\")",
+      "Bash(cmd //c \"taskkill /F /PID 6924\")"
     ]
   }
 }

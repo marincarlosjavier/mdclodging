@@ -1,10 +1,18 @@
 import jwt from 'jsonwebtoken';
 import { pool } from '../config/database.js';
+import { getTokenFromCookie } from './cookieAuth.js';
+import { isTokenBlacklisted } from './tokenBlacklist.js';
+import { logPermissionDenied } from '../services/auditLogger.js';
 
 // Authenticate JWT token
 export async function authenticateToken(req, res, next) {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
+  // Try to get token from cookie first (preferred), then Authorization header (legacy)
+  let token = getTokenFromCookie(req);
+
+  if (!token) {
+    const authHeader = req.headers['authorization'];
+    token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
+  }
 
   if (!token) {
     return res.status(401).json({ error: 'Access token required' });
@@ -12,6 +20,11 @@ export async function authenticateToken(req, res, next) {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    // Check if token is blacklisted (revoked)
+    if (decoded.jti && await isTokenBlacklisted(decoded.jti)) {
+      return res.status(401).json({ error: 'Token has been revoked' });
+    }
 
     // Get user from database with tenant info
     const result = await pool.query(
@@ -28,6 +41,7 @@ export async function authenticateToken(req, res, next) {
 
     req.user = result.rows[0];
     req.tenantId = result.rows[0].tenant_id;
+    req.decodedToken = decoded; // Store decoded token for logout/refresh
     next();
   } catch (error) {
     if (error.name === 'TokenExpiredError') {
@@ -67,14 +81,16 @@ export async function authenticateApiToken(req, res, next) {
   }
 }
 
-// Combined authentication (supports both JWT and API token)
+// Combined authentication (supports JWT from cookie, Authorization header, and API token)
 export async function authenticate(req, res, next) {
   const authHeader = req.headers['authorization'];
   const apiToken = req.headers['x-api-token'];
+  const cookieToken = getTokenFromCookie(req);
 
+  // Priority: API token > Cookie > Authorization header
   if (apiToken) {
     return authenticateApiToken(req, res, next);
-  } else if (authHeader) {
+  } else if (cookieToken || authHeader) {
     return authenticateToken(req, res, next);
   } else {
     return res.status(401).json({ error: 'Authentication required' });
@@ -83,7 +99,7 @@ export async function authenticate(req, res, next) {
 
 // Require specific role (supports both single role and array of roles)
 export function requireRole(...roles) {
-  return (req, res, next) => {
+  return async (req, res, next) => {
     if (!req.user) {
       return res.status(401).json({ error: 'Authentication required' });
     }
@@ -95,6 +111,9 @@ export function requireRole(...roles) {
     const hasRequiredRole = userRoles.some(userRole => roles.includes(userRole));
 
     if (!hasRequiredRole) {
+      // Log permission denied
+      await logPermissionDenied(req, roles, req.path);
+
       return res.status(403).json({
         error: 'Insufficient permissions',
         required: roles,

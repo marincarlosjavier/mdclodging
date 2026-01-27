@@ -51,14 +51,16 @@ export default function Users() {
     admin: 'Administrador',
     supervisor: 'Supervisor',
     housekeeping: 'Housekeeping',
-    maintenance: 'Mantenimiento'
+    maintenance: 'Mantenimiento',
+    skater: 'Patinador'
   };
 
   const roleColors = {
     admin: 'bg-purple-100 text-purple-800',
     supervisor: 'bg-blue-100 text-blue-800',
     housekeeping: 'bg-green-100 text-green-800',
-    maintenance: 'bg-orange-100 text-orange-800'
+    maintenance: 'bg-orange-100 text-orange-800',
+    skater: 'bg-yellow-100 text-yellow-800'
   };
 
   return (
@@ -196,6 +198,7 @@ export default function Users() {
                   >
                     <option value="housekeeping">Housekeeping</option>
                     <option value="maintenance">Mantenimiento</option>
+                    <option value="skater">Patinador</option>
                     <option value="supervisor">Supervisor</option>
                     <option value="admin">Administrador</option>
                   </select>

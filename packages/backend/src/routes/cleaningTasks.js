@@ -2,6 +2,7 @@ import express from 'express';
 import { pool } from '../config/database.js';
 import { authenticate, requireRole } from '../middleware/auth.js';
 import { asyncHandler } from '../middleware/error.js';
+import { checkTaskQuota } from '../middleware/quota.js';
 
 const router = express.Router();
 router.use(authenticate);
@@ -130,7 +131,7 @@ router.get('/:id', asyncHandler(async (req, res) => {
 }));
 
 // POST /api/cleaning-tasks - Create manual cleaning task (e.g., deep cleaning)
-router.post('/', requireRole('admin', 'supervisor'), asyncHandler(async (req, res) => {
+router.post('/', requireRole('admin', 'supervisor'), checkTaskQuota, asyncHandler(async (req, res) => {
   const {
     property_id,
     task_type,

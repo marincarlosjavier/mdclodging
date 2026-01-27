@@ -766,7 +766,8 @@ export async function reportCheckout(ctx, reservationId) {
         actual_checkout_time: new Date(),
         adults: reservation.adults,
         children: reservation.children,
-        infants: reservation.infants
+        infants: reservation.infants,
+        task_type: 'check_out'
       });
 
       return ctx.reply(

@@ -9,9 +9,9 @@ const TASK_TYPE_EMOJI = {
 };
 
 const TASK_TYPE_LABELS = {
-  check_out: 'CHECK OUT - Aseo completo',
-  stay_over: 'STAY OVER - Aseo ligero',
-  deep_cleaning: 'DEEP CLEANING - Aseo profundo'
+  check_out: 'Aseo Completo',
+  stay_over: 'Aseo Liviano',
+  deep_cleaning: 'Aseo Profundo'
 };
 
 /**
@@ -53,6 +53,14 @@ export async function showCleaningTasks(ctx) {
     const statusText = activeTask.started_at ? 'en progreso' : 'asignada';
     const emoji = TASK_TYPE_EMOJI[activeTask.task_type] || '🏠';
 
+    const buttons = [
+      activeTask.started_at
+        ? [Markup.button.callback('✅ Marcar como Completada', `complete_task_${activeTask.id}`)]
+        : [Markup.button.callback('▶️ Iniciar Trabajo', `start_task_${activeTask.id}`)],
+      [Markup.button.callback('🚫 Abandonar Tarea', `abandon_task_${activeTask.id}`)],
+      [Markup.button.callback('🔙 Menú Principal', 'back_to_menu')]
+    ];
+
     return ctx.reply(
       `⚠️ *Ya tienes una tarea ${statusText}*\n\n` +
       `${emoji} *${TASK_TYPE_LABELS[activeTask.task_type]}*\n` +
@@ -60,11 +68,7 @@ export async function showCleaningTasks(ctx) {
       `Debes completar esta tarea antes de tomar otra.`,
       {
         parse_mode: 'Markdown',
-        ...Markup.inlineKeyboard([
-          activeTask.started_at
-            ? [Markup.button.callback('✅ Marcar como Completada', `complete_task_${activeTask.id}`)]
-            : [Markup.button.callback('▶️ Iniciar Trabajo', `start_task_${activeTask.id}`)]
-        ])
+        ...Markup.inlineKeyboard(buttons)
       }
     );
   }
@@ -325,7 +329,7 @@ export async function handleCompleteTask(ctx, taskId) {
 }
 
 /**
- * Show user's settlement status
+ * Show user's settlement status grouped by day
  */
 export async function showSettlementStatus(ctx) {
   const contact = ctx.contact;
@@ -337,7 +341,7 @@ export async function showSettlementStatus(ctx) {
   const today = new Date().toISOString().split('T')[0];
 
   // Get today's completed tasks (not in settlement)
-  const tasksResult = await pool.query(
+  const todayTasksResult = await pool.query(
     `SELECT ct.id, ct.task_type, p.name as property_name,
             EXTRACT(EPOCH FROM (ct.completed_at - ct.started_at))/60 as duration_minutes,
             cr.rate
@@ -353,22 +357,39 @@ export async function showSettlementStatus(ctx) {
     [contact.user_id, today]
   );
 
-  // Get today's settlement if exists
-  const settlementResult = await pool.query(
-    `SELECT * FROM cleaning_settlements
-     WHERE user_id = $1 AND settlement_date = $2`,
-    [contact.user_id, today]
+  // Get all settlements (last 30 days)
+  const settlementsResult = await pool.query(
+    `SELECT cs.*, u.full_name as reviewer_name
+     FROM cleaning_settlements cs
+     LEFT JOIN users u ON u.id = cs.reviewed_by
+     WHERE cs.user_id = $1
+       AND cs.settlement_date >= CURRENT_DATE - INTERVAL '30 days'
+     ORDER BY cs.settlement_date DESC`,
+    [contact.user_id]
   );
 
-  let message = '📊 *MI LIQUIDACIÓN DE HOY*\n\n';
+  let message = '💰 *MI LIQUIDACIÓN*\n\n';
 
-  if (tasksResult.rows.length === 0 && settlementResult.rows.length === 0) {
-    message += '📭 No tienes tareas completadas hoy.';
-    return ctx.reply(message, { parse_mode: 'Markdown' });
+  // Show today's pending tasks
+  if (todayTasksResult.rows.length > 0) {
+    message += `📝 *Hoy (${today}) - Pendiente de reportar*\n`;
+
+    let todayTotal = 0;
+    todayTasksResult.rows.forEach((task) => {
+      const emoji = TASK_TYPE_EMOJI[task.task_type] || '🏠';
+      const rate = parseFloat(task.rate || 0);
+      todayTotal += rate;
+      const taskName = TASK_TYPE_LABELS[task.task_type];
+
+      message += `  ${emoji} ${task.property_name} - ${taskName} | $${rate.toFixed(0)}\n`;
+    });
+
+    message += `  💵 *Subtotal: $${todayTotal.toFixed(0)}*\n\n`;
+    message += '  ⬇️ _Reporta al terminar tu jornada_\n\n';
   }
 
-  if (settlementResult.rows.length > 0) {
-    const settlement = settlementResult.rows[0];
+  // Show settlements grouped by status
+  if (settlementsResult.rows.length > 0) {
     const statusEmoji = {
       draft: '📝',
       submitted: '⏳',
@@ -384,51 +405,113 @@ export async function showSettlementStatus(ctx) {
       paid: 'Pagada'
     };
 
-    message += `${statusEmoji[settlement.status]} Estado: *${statusLabels[settlement.status]}*\n`;
-    message += `📋 Total tareas: ${settlement.total_tasks}\n`;
-    message += `💵 Total: $${parseFloat(settlement.total_amount).toFixed(0)}\n`;
+    message += `📜 *Historial (últimos 30 días)*\n\n`;
 
-    if (settlement.status === 'rejected' && settlement.review_notes) {
-      message += `\n❌ Motivo rechazo:\n_${settlement.review_notes}_\n`;
-    }
+    settlementsResult.rows.forEach((settlement) => {
+      const date = new Date(settlement.settlement_date).toLocaleDateString('es-CO');
+      const status = settlement.status;
 
-    if (settlement.status === 'approved' || settlement.status === 'paid') {
-      message += `\n✅ Aprobada por: ${settlement.reviewer_name || 'Admin'}\n`;
-    }
+      message += `${statusEmoji[status]} *${date}*\n`;
+      message += `  Estado: ${statusLabels[status]}\n`;
+      message += `  Tareas: ${settlement.total_tasks} | Total: $${parseFloat(settlement.total_amount).toFixed(0)}\n`;
 
-    return ctx.reply(message, { parse_mode: 'Markdown' });
+      if (status === 'rejected' && settlement.review_notes) {
+        message += `  ❌ Motivo: _${settlement.review_notes}_\n`;
+      }
+      if ((status === 'approved' || status === 'paid') && settlement.reviewer_name) {
+        message += `  ✅ Aprobada por: ${settlement.reviewer_name}\n`;
+      }
+
+      message += '\n';
+    });
   }
 
-  // Show tasks not yet in settlement
-  message += `📝 *Tareas pendientes de reportar:*\n\n`;
+  if (todayTasksResult.rows.length === 0 && settlementsResult.rows.length === 0) {
+    message += '📭 No tienes tareas completadas ni liquidaciones registradas.';
+    return ctx.reply(message, {
+      parse_mode: 'Markdown',
+      ...Markup.inlineKeyboard([
+        [Markup.button.callback('🔙 Menú Principal', 'back_to_menu')]
+      ])
+    });
+  }
+
+  const buttons = [];
+  if (todayTasksResult.rows.length > 0) {
+    buttons.push([Markup.button.callback('📤 Reportar Liquidación Hoy', 'report_settlement')]);
+  }
+  buttons.push([Markup.button.callback('🔙 Menú Principal', 'back_to_menu')]);
+
+  return ctx.reply(message, {
+    parse_mode: 'Markdown',
+    ...Markup.inlineKeyboard(buttons)
+  });
+}
+
+/**
+ * Handle settlement reporting - Show confirmation first
+ */
+export async function handleReportSettlement(ctx) {
+  const contact = ctx.contact;
+
+  if (!contact.user_id) {
+    return ctx.answerCbQuery('❌ No estás vinculado al sistema');
+  }
+
+  const today = new Date().toISOString().split('T')[0];
+
+  // Get today's completed tasks to show summary
+  const tasksResult = await pool.query(
+    `SELECT ct.id, ct.task_type, p.name as property_name,
+            cr.rate
+     FROM cleaning_tasks ct
+     LEFT JOIN properties p ON p.id = ct.property_id
+     LEFT JOIN property_types pt ON pt.id = p.property_type_id
+     LEFT JOIN cleaning_rates cr ON cr.property_type_id = pt.id AND cr.task_type = ct.task_type AND cr.tenant_id = ct.tenant_id
+     WHERE ct.assigned_to = $1
+       AND ct.status = 'completed'
+       AND DATE(ct.completed_at) = $2
+       AND ct.id NOT IN (SELECT cleaning_task_id FROM cleaning_settlement_items)
+     ORDER BY ct.completed_at`,
+    [contact.user_id, today]
+  );
+
+  if (tasksResult.rows.length === 0) {
+    return ctx.answerCbQuery('❌ No tienes tareas completadas hoy');
+  }
 
   let totalAmount = 0;
+  let message = '⚠️ *CONFIRMAR LIQUIDACIÓN*\n\n';
+  message += `📝 Estás por reportar ${tasksResult.rows.length} ${tasksResult.rows.length === 1 ? 'tarea' : 'tareas'}:\n\n`;
 
   tasksResult.rows.forEach((task, index) => {
     const emoji = TASK_TYPE_EMOJI[task.task_type] || '🏠';
     const rate = parseFloat(task.rate || 0);
     totalAmount += rate;
-    const durationMinutes = Math.round(task.duration_minutes);
+    const taskName = TASK_TYPE_LABELS[task.task_type];
 
     message += `${index + 1}. ${emoji} ${task.property_name}\n`;
-    message += `   ⏱️ ${durationMinutes}m | 💰 $${rate.toFixed(0)}\n`;
+    message += `   ${taskName} - $${rate.toFixed(0)}\n`;
   });
 
-  message += `\n💵 *Total del día: $${totalAmount.toFixed(0)}*\n\n`;
-  message += '💡 Al terminar tu jornada, reporta tu liquidación para que sea revisada por el administrador.';
+  message += `\n💵 *Total: $${totalAmount.toFixed(0)}*\n\n`;
+  message += '❓ ¿Deseas reportar esta liquidación para revisión?';
+
+  await ctx.answerCbQuery();
 
   return ctx.reply(message, {
     parse_mode: 'Markdown',
     ...Markup.inlineKeyboard([
-      [Markup.button.callback('📤 Reportar Liquidación', 'report_settlement')]
+      [Markup.button.callback('✅ Sí, Reportar', 'confirm_report_settlement')],
+      [Markup.button.callback('❌ Cancelar', 'back_to_menu')]
     ])
   });
 }
 
 /**
- * Handle settlement reporting
+ * Confirm and create settlement
  */
-export async function handleReportSettlement(ctx) {
+export async function handleConfirmReportSettlement(ctx) {
   const contact = ctx.contact;
 
   if (!contact.user_id) {
@@ -523,7 +606,7 @@ export async function handleReportSettlement(ctx) {
 
     await ctx.answerCbQuery('✅ Liquidación reportada!');
 
-    return ctx.reply(
+    return ctx.editMessageText(
       `✅ *Liquidación Reportada*\n\n` +
       `📋 Total tareas: ${settlement.total_tasks}\n` +
       `💵 Total: $${parseFloat(settlement.total_amount).toFixed(0)}\n\n` +
@@ -566,19 +649,32 @@ export async function notifyCheckout(tenantId, reservationData) {
       minute: '2-digit'
     });
 
+    const { task_type } = reservationData;
+    const taskTypeLabels = {
+      'check_out': '🚪 Aseo Completo (Checkout)',
+      'stay_over': '🧹 Aseo Liviano (Stay Over)',
+      'deep_cleaning': '🧼 Aseo Profundo'
+    };
+    const taskTypeLabel = taskTypeLabels[task_type] || task_type;
+
     const message =
       `🚪 *CHECKOUT REPORTADO*\n\n` +
       `📍 Propiedad: *${property_name}*\n` +
       `⏰ Hora: ${timeStr}\n` +
-      `👥 Huéspedes: ${totalGuests}\n\n` +
-      `La propiedad está disponible para limpieza.\n` +
-      `Usa /tareas para ver y tomar la tarea.`;
+      `👥 Huéspedes: ${totalGuests}\n` +
+      `🧹 Tipo: ${taskTypeLabel}\n\n` +
+      `La propiedad está disponible para limpieza.`;
 
     // Send to all housekeeping staff
     for (const contact of result.rows) {
       try {
         await bot.telegram.sendMessage(contact.telegram_id, message, {
-          parse_mode: 'Markdown'
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: '📋 Ver Tareas Pendientes', callback_data: 'cleaning_pending_tasks' }]
+            ]
+          }
         });
       } catch (error) {
         console.error(`Failed to notify ${contact.telegram_id}:`, error.message);
@@ -591,13 +687,83 @@ export async function notifyCheckout(tenantId, reservationData) {
   }
 }
 
+/**
+ * Handle abandoning a task (return to available tasks)
+ */
+export async function handleAbandonTask(ctx, taskId) {
+  const contact = ctx.contact;
+
+  if (!contact.user_id) {
+    return ctx.answerCbQuery('❌ No estás vinculado al sistema');
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Verify task belongs to user
+    const taskCheck = await client.query(
+      `SELECT ct.*, p.name as property_name
+       FROM cleaning_tasks ct
+       LEFT JOIN properties p ON p.id = ct.property_id
+       WHERE ct.id = $1 AND ct.assigned_to = $2 AND ct.status IN ('pending', 'in_progress')`,
+      [taskId, contact.user_id]
+    );
+
+    if (taskCheck.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return ctx.answerCbQuery('❌ Tarea no encontrada o ya completada');
+    }
+
+    const task = taskCheck.rows[0];
+
+    // Return task to pending state (unassign)
+    await client.query(
+      `UPDATE cleaning_tasks
+       SET assigned_to = NULL,
+           assigned_at = NULL,
+           started_at = NULL,
+           status = 'pending',
+           updated_at = NOW()
+       WHERE id = $1`,
+      [taskId]
+    );
+
+    await client.query('COMMIT');
+
+    await ctx.answerCbQuery('✅ Tarea liberada');
+
+    return ctx.reply(
+      `✅ *Tarea Abandonada*\n\n` +
+      `📍 Propiedad: ${task.property_name}\n\n` +
+      `La tarea ha sido devuelta a la lista de tareas disponibles.\n` +
+      `Otro miembro del equipo podrá tomarla.`,
+      {
+        parse_mode: 'Markdown',
+        ...Markup.inlineKeyboard([
+          [Markup.button.callback('📋 Ver Tareas Disponibles', 'cleaning_tasks')],
+          [Markup.button.callback('🔙 Menú Principal', 'back_to_menu')]
+        ])
+      }
+    );
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Error abandoning task:', error);
+    return ctx.answerCbQuery('❌ Error liberando tarea');
+  } finally {
+    client.release();
+  }
+}
+
 // Export for use in bot
 export default {
   showCleaningTasks,
   handleTakeTask,
   handleStartTask,
   handleCompleteTask,
+  handleAbandonTask,
   showSettlementStatus,
   handleReportSettlement,
+  handleConfirmReportSettlement,
   notifyCheckout
 };

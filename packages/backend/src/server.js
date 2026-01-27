@@ -1,9 +1,17 @@
+import dotenv from 'dotenv';
+
+// Load environment variables first
+dotenv.config();
+
+// Validate environment variables before proceeding
+import { validateEnvironment } from './config/validateEnv.js';
+validateEnvironment();
+
+// Import after validation to ensure config is valid
 import app from './app.js';
 import { pool } from './config/database.js';
 import { startTelegramBot } from './telegram/bot.js';
-import dotenv from 'dotenv';
-
-dotenv.config();
+import updateMetrics from './jobs/updateMetrics.js';
 
 const PORT = process.env.PORT || 3000;
 const NODE_ENV = process.env.NODE_ENV || 'development';
@@ -51,15 +59,34 @@ const server = app.listen(PORT, () => {
   console.log(`🌍 Environment: ${NODE_ENV}`);
   console.log(`📡 API URL: http://localhost:${PORT}/api`);
   console.log(`🏥 Health check: http://localhost:${PORT}/health`);
+  console.log(`📊 Metrics: http://localhost:${PORT}/metrics`);
   console.log('='.repeat(60) + '\n');
 
   // Initialize Telegram bot after server starts
   initializeTelegramBot();
+
+  // Update metrics every 30 seconds
+  const metricsInterval = setInterval(() => {
+    updateMetrics().catch(err => {
+      console.error('Error updating metrics:', err.message);
+    });
+  }, 30000);
+
+  // Initial metrics update
+  updateMetrics();
+
+  // Store interval for cleanup
+  server.metricsInterval = metricsInterval;
 });
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
   console.log('⚠️  SIGTERM signal received: closing HTTP server');
+
+  // Clear metrics interval
+  if (server.metricsInterval) {
+    clearInterval(server.metricsInterval);
+  }
 
   server.close(() => {
     console.log('✅ HTTP server closed');
@@ -73,6 +100,11 @@ process.on('SIGTERM', () => {
 
 process.on('SIGINT', () => {
   console.log('\n⚠️  SIGINT signal received: closing HTTP server');
+
+  // Clear metrics interval
+  if (server.metricsInterval) {
+    clearInterval(server.metricsInterval);
+  }
 
   server.close(() => {
     console.log('✅ HTTP server closed');
