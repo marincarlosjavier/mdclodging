@@ -17,7 +17,7 @@ export async function getPlans(activeOnly = true) {
     query += ' WHERE is_active = true';
   }
 
-  query += ' ORDER BY sort_order ASC';
+  query += ' ORDER BY price_monthly_cop ASC';
 
   const result = await pool.query(query);
   return result.rows;
