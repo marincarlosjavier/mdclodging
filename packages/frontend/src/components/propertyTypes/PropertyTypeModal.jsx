@@ -273,6 +273,31 @@ export default function PropertyTypeModal({ type, onClose }) {
     }));
   };
 
+  // Generate nomenclature examples based on type
+  const generateNomenclatureExamples = () => {
+    const type = formData.room_nomenclature_type || 'numeric';
+    const prefix = formData.room_nomenclature_prefix || '';
+    const start = formData.room_nomenclature_start || 101;
+    const count = Math.min(formData.room_count || 3, 3); // Show max 3 examples
+
+    if (type === 'numeric') {
+      const examples = [];
+      for (let i = 0; i < count; i++) {
+        examples.push(`${prefix}${start + i}`);
+      }
+      return examples.join(', ') + (formData.room_count > 3 ? '...' : '');
+    } else if (type === 'alphabetic') {
+      const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+      const examples = [];
+      for (let i = 0; i < count && i < 26; i++) {
+        examples.push(`${prefix}${letters[i]}`);
+      }
+      return examples.join(', ') + (formData.room_count > 3 ? '...' : '');
+    }
+
+    return 'N/A';
+  };
+
   // Convert beds array to individual fields for backend compatibility
   const formatRoomsForBackend = (rooms) => {
     return rooms.map(room => {
