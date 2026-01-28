@@ -191,7 +191,7 @@ router.get('/template', requireSupervisor, asyncHandler(async (req, res) => {
 router.post(
   '/import-excel',
   requireSupervisor,
-  uploadExcel.single('file'),
+  ...uploadExcel,
   handleUploadError,
   asyncHandler(async (req, res) => {
     if (!req.file) {
