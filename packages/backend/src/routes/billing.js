@@ -34,14 +34,7 @@ router.get('/plans', asyncHandler(async (req, res) => {
     plans: plans.map(plan => ({
       ...plan,
       // Format prices for display
-      price_monthly_formatted: `$${plan.price_monthly_cop.toLocaleString('es-CO')} COP`,
-      price_yearly_formatted: plan.price_yearly_cop
-        ? `$${plan.price_yearly_cop.toLocaleString('es-CO')} COP`
-        : null,
-      // Calculate yearly savings
-      yearly_savings: plan.price_yearly_cop
-        ? (plan.price_monthly_cop * 12) - plan.price_yearly_cop
-        : 0
+      price_monthly_formatted: `$${plan.price_monthly_cop.toLocaleString('es-CO')} COP`
     }))
   });
 }));

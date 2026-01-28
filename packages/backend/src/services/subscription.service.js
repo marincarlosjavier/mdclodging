@@ -50,7 +50,6 @@ export async function getSubscription(tenantId) {
             sp.name as plan_name,
             sp.display_name as plan_display_name,
             sp.price_monthly_cop,
-            sp.price_yearly_cop,
             sp.max_users,
             sp.max_properties,
             sp.max_tasks_per_month,
