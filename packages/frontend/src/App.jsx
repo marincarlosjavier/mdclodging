@@ -5,7 +5,6 @@ import Dashboard from './pages/Dashboard';
 import Tasks from './pages/Tasks';
 import Users from './pages/Users';
 import Telegram from './pages/Telegram';
-import TelegramPermissions from './pages/TelegramPermissions';
 import Settings from './pages/Settings';
 import PropertyTypes from './pages/PropertyTypes';
 import Properties from './pages/Properties';
@@ -169,10 +168,10 @@ function App() {
           }
         />
         <Route
-          path="telegram-permissions"
+          path="telegram/permissions"
           element={
             <ProtectedRoute allowedRoles={['admin']}>
-              <TelegramPermissions />
+              <Telegram />
             </ProtectedRoute>
           }
         />

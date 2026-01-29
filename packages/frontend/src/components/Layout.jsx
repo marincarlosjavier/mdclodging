@@ -62,7 +62,6 @@ export default function Layout() {
       : []),
     ...(hasRole('admin')
       ? [
-          { path: '/telegram-permissions', label: 'Permisos Telegram', icon: Shield },
           { path: '/settings', label: 'Configuración', icon: Settings }
         ]
       : [])
