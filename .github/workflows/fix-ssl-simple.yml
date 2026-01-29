@@ -1,0 +1,33 @@
+name: Fix SSL Simple
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'fix-ssl-simple'
+
+jobs:
+  fix-ssl:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Fix HTTPS Configuration
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd /opt/mdclodging
+            git pull origin master
+            cp /opt/mdclodging/nginx/nginx.conf /opt/mdclodging/nginx/nginx.conf.backup || true
+            cp nginx/nginx.conf /opt/mdclodging/nginx/nginx.conf
+            docker stop mdclodging_nginx && docker rm mdclodging_nginx
+            docker run -d --name mdclodging_nginx --network mdclodging_mdclodging_network -p 80:80 -p 443:443 -v /opt/mdclodging/nginx/nginx.conf:/etc/nginx/nginx.conf:ro -v /etc/letsencrypt:/etc/letsencrypt:ro -v certbot_data:/var/www/certbot:ro --restart unless-stopped nginx:alpine
+            sleep 8
+            docker ps --filter 'name=mdclodging_nginx'
+            docker logs mdclodging_nginx --tail 30
+            docker exec mdclodging_nginx nginx -t
+            curl -k -I https://localhost | head -10
