@@ -17,7 +17,8 @@ export default function CheckinReport() {
     setLoading(true);
     try {
       const response = await api.get(`/reservations/checkin-report?date=${date}`);
-      setReport(response.data);
+      const checkins = Array.isArray(response.data.checkins) ? response.data.checkins : [];
+      setReport({ ...response.data, checkins });
 
       // Initialize checked items from localStorage
       const savedItems = localStorage.getItem(`checkin-${date}`);

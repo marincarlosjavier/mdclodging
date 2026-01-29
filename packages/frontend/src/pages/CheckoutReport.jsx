@@ -89,8 +89,9 @@ export default function CheckoutReport() {
       const statuses = backendStatuses.join(',');
       console.log('[fetchReport] Fetching:', `/reservations/checkout-report?date=${date}&statuses=${statuses}`);
       const response = await api.get(`/reservations/checkout-report?date=${date}&statuses=${statuses}`);
-      console.log('[fetchReport] Received', response.data.checkouts.length, 'checkouts');
-      setReport(response.data);
+      const checkouts = Array.isArray(response.data.checkouts) ? response.data.checkouts : [];
+      console.log('[fetchReport] Received', checkouts.length, 'checkouts');
+      setReport({ ...response.data, checkouts });
     } catch (error) {
       console.error('Error fetching checkout report:', error);
     } finally {
