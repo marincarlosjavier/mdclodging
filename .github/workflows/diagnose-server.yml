@@ -1,0 +1,49 @@
+name: Diagnose Server
+
+on:
+  workflow_dispatch:
+
+jobs:
+  diagnose:
+    name: Server Diagnostics
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.PROD_SSH_KEY }}" > ~/.ssh/prod_key
+          chmod 600 ~/.ssh/prod_key
+          ssh-keyscan -H ${{ secrets.PROD_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Run diagnostics
+        run: |
+          ssh -i ~/.ssh/prod_key ${{ secrets.PROD_USER }}@${{ secrets.PROD_HOST }} << 'EOF'
+            echo "=== Docker Containers Status ==="
+            docker ps --filter 'name=mdclodging'
+
+            echo -e "\n=== Nginx Container Details ==="
+            docker inspect mdclodging_nginx --format '{{.Name}}: {{.State.Status}}' || echo "Nginx container not found"
+            docker port mdclodging_nginx || echo "No ports exposed"
+
+            echo -e "\n=== Nginx Logs (last 30 lines) ==="
+            docker logs mdclodging_nginx --tail 30 2>&1 || echo "Cannot get logs"
+
+            echo -e "\n=== Nginx Listening Ports ==="
+            docker exec mdclodging_nginx netstat -tln 2>&1 || echo "Cannot check ports"
+
+            echo -e "\n=== SSL Certificate Files ==="
+            docker exec mdclodging_nginx ls -la /etc/nginx/ssl/ 2>&1 || echo "Cannot check SSL files"
+
+            echo -e "\n=== Nginx Configuration Test ==="
+            docker exec mdclodging_nginx nginx -t 2>&1 || echo "Config test failed"
+
+            echo -e "\n=== Firewall Status ==="
+            sudo ufw status || echo "UFW not available"
+
+            echo -e "\n=== Test HTTPS Locally ==="
+            curl -k -I https://localhost 2>&1 | head -10 || echo "HTTPS test failed"
+
+            echo -e "\n=== Test HTTP to HTTPS Redirect ==="
+            curl -I http://localhost 2>&1 | head -10 || echo "HTTP test failed"
+          EOF
