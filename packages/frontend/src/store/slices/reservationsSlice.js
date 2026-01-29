@@ -76,7 +76,7 @@ const reservationsSlice = createSlice({
       })
       .addCase(fetchReservations.fulfilled, (state, action) => {
         state.loading = false;
-        state.reservations = action.payload;
+        state.reservations = Array.isArray(action.payload) ? action.payload : [];
       })
       .addCase(fetchReservations.rejected, (state, action) => {
         state.loading = false;
@@ -144,7 +144,7 @@ const reservationsSlice = createSlice({
       })
       .addCase(fetchBreakfastList.fulfilled, (state, action) => {
         state.loading = false;
-        state.breakfastList = action.payload;
+        state.breakfastList = Array.isArray(action.payload) ? action.payload : [];
       })
       .addCase(fetchBreakfastList.rejected, (state, action) => {
         state.loading = false;

@@ -68,7 +68,7 @@ const propertyTypesSlice = createSlice({
       })
       .addCase(fetchPropertyTypes.fulfilled, (state, action) => {
         state.loading = false;
-        state.types = action.payload;
+        state.types = Array.isArray(action.payload) ? action.payload : [];
       })
       .addCase(fetchPropertyTypes.rejected, (state, action) => {
         state.loading = false;

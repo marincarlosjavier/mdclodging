@@ -61,7 +61,7 @@ const catalogSlice = createSlice({
       })
       .addCase(fetchCatalogItems.fulfilled, (state, action) => {
         state.loading = false;
-        state.items = action.payload;
+        state.items = Array.isArray(action.payload) ? action.payload : [];
       })
       .addCase(fetchCatalogItems.rejected, (state, action) => {
         state.loading = false;

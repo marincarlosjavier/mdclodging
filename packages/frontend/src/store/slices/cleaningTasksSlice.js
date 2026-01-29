@@ -92,7 +92,7 @@ const cleaningTasksSlice = createSlice({
       })
       .addCase(fetchCleaningTasks.fulfilled, (state, action) => {
         state.loading = false;
-        state.tasks = action.payload;
+        state.tasks = Array.isArray(action.payload) ? action.payload : [];
       })
       .addCase(fetchCleaningTasks.rejected, (state, action) => {
         state.loading = false;
