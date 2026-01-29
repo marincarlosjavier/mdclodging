@@ -12,13 +12,13 @@ jobs:
       - name: Configure SSH
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.PROD_SSH_KEY }}" > ~/.ssh/prod_key
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/prod_key
           chmod 600 ~/.ssh/prod_key
-          ssh-keyscan -H ${{ secrets.PROD_HOST }} >> ~/.ssh/known_hosts
+          ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
 
       - name: Run diagnostics
         run: |
-          ssh -i ~/.ssh/prod_key ${{ secrets.PROD_USER }}@${{ secrets.PROD_HOST }} << 'EOF'
+          ssh -i ~/.ssh/prod_key ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
             echo "=== Docker Containers Status ==="
             docker ps --filter 'name=mdclodging'
 
