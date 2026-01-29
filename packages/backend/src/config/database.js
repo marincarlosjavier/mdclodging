@@ -24,6 +24,9 @@ if (process.env.DATABASE_URL) {
     config.ssl = {
       rejectUnauthorized: false
     };
+  } else {
+    // Explicitly disable SSL for development
+    config.ssl = false;
   }
 }
 

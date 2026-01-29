@@ -28,7 +28,7 @@ services:
       dockerfile: Dockerfile
     container_name: mdclodging_backend
     environment:
-      NODE_ENV: production
+      NODE_ENV: development
       PORT: 3000
       DATABASE_URL: postgresql://postgres:password@postgres:5432/mdclodging
       DB_HOST: postgres
