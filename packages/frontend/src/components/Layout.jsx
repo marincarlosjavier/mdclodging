@@ -49,15 +49,28 @@ export default function Layout() {
           { path: '/cleaning-settlements', label: 'Liquidaciones', icon: DollarSign }
         ]
       : []),
-    { path: '/breakfast-list', label: 'Lista de Desayunos', icon: Coffee },
-    { path: '/tasks', label: 'Tareas de Mantenimiento', icon: ListTodo },
+    { path: '/breakfast-list', label: 'Comedor', icon: Coffee },
+    { path: '/tasks', label: 'Mantenimiento', icon: ListTodo },
     ...(hasRole('admin', 'supervisor')
       ? [
-          { path: '/property-types', label: 'Tipos de Propiedad', icon: Building2 },
-          { path: '/properties', label: 'Propiedades', icon: Building2 },
+          {
+            path: '/property-types',
+            label: 'Tipos de Propiedad',
+            icon: Building2,
+            children: [
+              { path: '/properties', label: 'Propiedades', icon: Building2 }
+            ]
+          },
           { path: '/catalog', label: 'Catálogo', icon: List },
           { path: '/users', label: 'Usuarios', icon: Users },
-          { path: '/telegram', label: 'Telegram', icon: MessageCircle }
+          {
+            path: '/telegram',
+            label: 'Telegram',
+            icon: MessageCircle,
+            children: [
+              { path: '/telegram/permissions', label: 'Permisos', icon: Shield }
+            ]
+          }
         ]
       : []),
     ...(hasRole('admin')
@@ -107,21 +120,43 @@ export default function Layout() {
           {/* Navigation */}
           <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
             {navItems.map((item) => (
-              <NavLink
-                key={item.path}
-                to={item.path}
-                onClick={() => setSidebarOpen(false)}
-                className={({ isActive }) =>
-                  `flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-                    isActive
-                      ? 'bg-primary-50 text-primary-600 font-medium'
-                      : 'text-gray-700 hover:bg-gray-50'
-                  }`
-                }
-              >
-                <item.icon size={20} />
-                <span>{item.label}</span>
-              </NavLink>
+              <div key={item.path}>
+                <NavLink
+                  to={item.path}
+                  onClick={() => setSidebarOpen(false)}
+                  className={({ isActive }) =>
+                    `flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                      isActive
+                        ? 'bg-primary-50 text-primary-600 font-medium'
+                        : 'text-gray-700 hover:bg-gray-50'
+                    }`
+                  }
+                >
+                  <item.icon size={20} />
+                  <span>{item.label}</span>
+                </NavLink>
+                {item.children && (
+                  <div className="ml-4 mt-1 space-y-1">
+                    {item.children.map((child) => (
+                      <NavLink
+                        key={child.path}
+                        to={child.path}
+                        onClick={() => setSidebarOpen(false)}
+                        className={({ isActive }) =>
+                          `flex items-center gap-3 px-4 py-2 rounded-lg transition-colors text-sm ${
+                            isActive
+                              ? 'bg-primary-50 text-primary-600 font-medium'
+                              : 'text-gray-600 hover:bg-gray-50'
+                          }`
+                        }
+                      >
+                        <child.icon size={18} />
+                        <span>{child.label}</span>
+                      </NavLink>
+                    ))}
+                  </div>
+                )}
+              </div>
             ))}
           </nav>
 
