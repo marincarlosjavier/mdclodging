@@ -26,7 +26,7 @@ export default function Dashboard() {
   const fetchStats = async () => {
     try {
       const response = await tasksAPI.getAll();
-      const tasks = response.data;
+      const tasks = Array.isArray(response.data) ? response.data : [];
 
       setStats({
         total: tasks.length,
