@@ -1,0 +1,80 @@
+name: Fix HTTPS Configuration
+
+on:
+  workflow_dispatch:
+
+jobs:
+  fix:
+    name: Fix HTTPS Ports and Configuration
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.PROD_SSH_KEY }}" > ~/.ssh/prod_key
+          chmod 600 ~/.ssh/prod_key
+          ssh-keyscan -H ${{ secrets.PROD_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Fix nginx container ports
+        run: |
+          ssh -i ~/.ssh/prod_key ${{ secrets.PROD_USER }}@${{ secrets.PROD_HOST }} << 'EOF'
+            set -e
+
+            echo "=== Current nginx container status ==="
+            docker ps --filter 'name=mdclodging_nginx'
+            docker port mdclodging_nginx 2>&1 || echo "No ports mapped"
+
+            echo -e "\n=== Stopping and removing old nginx container ==="
+            docker stop mdclodging_nginx || true
+            docker rm mdclodging_nginx || true
+
+            echo -e "\n=== Creating new nginx container with correct port mappings ==="
+            docker run -d \
+              --name mdclodging_nginx \
+              --network mdclodging_mdclodging_network \
+              --network-alias nginx \
+              -p 80:80 \
+              -p 443:443 \
+              -v /opt/mdclodging/nginx/nginx.conf:/etc/nginx/nginx.conf:ro \
+              -v /opt/mdclodging/nginx/ssl:/etc/nginx/ssl:ro \
+              -v certbot_data:/var/www/certbot:ro \
+              --restart unless-stopped \
+              nginx:alpine
+
+            echo -e "\n=== Waiting for nginx to start ==="
+            sleep 5
+
+            echo -e "\n=== Verifying nginx status ==="
+            docker ps --filter 'name=mdclodging_nginx'
+            docker port mdclodging_nginx
+
+            echo -e "\n=== Testing nginx configuration ==="
+            docker exec mdclodging_nginx nginx -t
+
+            echo -e "\n=== Checking nginx logs ==="
+            docker logs mdclodging_nginx --tail 20
+
+            echo -e "\n=== Testing HTTPS locally ==="
+            sleep 3
+            curl -k -I https://localhost 2>&1 | head -10 || echo "Local HTTPS test failed"
+
+            echo -e "\n=== Testing HTTP to HTTPS redirect ==="
+            curl -I http://localhost 2>&1 | head -10 || echo "HTTP redirect test failed"
+
+            echo -e "\n✅ Nginx container recreated with ports 80 and 443 exposed"
+          EOF
+
+      - name: Test external HTTPS access
+        run: |
+          echo "=== Testing external HTTPS access ==="
+          sleep 10
+
+          echo "Testing app.aneldida.com..."
+          curl -I https://app.aneldida.com 2>&1 | head -10 || echo "app.aneldida.com test failed"
+
+          echo -e "\nTesting api.aneldida.com..."
+          curl -I https://api.aneldida.com/health 2>&1 | head -10 || echo "api.aneldida.com test failed"
+
+          echo -e "\nTesting HTTP to HTTPS redirect..."
+          curl -I http://app.aneldida.com 2>&1 | head -10 || echo "Redirect test failed"
