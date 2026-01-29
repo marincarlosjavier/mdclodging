@@ -1,0 +1,73 @@
+name: Fix Nginx with Correct Volumes
+
+on:
+  workflow_dispatch:
+
+jobs:
+  fix:
+    name: Recreate Nginx with Correct Certificate Mounts
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/prod_key
+          chmod 600 ~/.ssh/prod_key
+          ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Recreate nginx with letsencrypt volume
+        run: |
+          ssh -i ~/.ssh/prod_key ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
+            set -e
+
+            echo "=== Stopping current nginx container ==="
+            docker stop mdclodging_nginx || true
+            docker rm mdclodging_nginx || true
+
+            echo -e "\n=== Creating nginx container with letsencrypt volume ==="
+            docker run -d \
+              --name mdclodging_nginx \
+              --network mdclodging_mdclodging_network \
+              --network-alias nginx \
+              -p 80:80 \
+              -p 443:443 \
+              -v /opt/mdclodging/nginx/nginx.conf:/etc/nginx/nginx.conf:ro \
+              -v /etc/letsencrypt:/etc/letsencrypt:ro \
+              -v certbot_data:/var/www/certbot:ro \
+              --restart unless-stopped \
+              nginx:alpine
+
+            echo -e "\n=== Waiting for nginx to start ==="
+            sleep 5
+
+            echo -e "\n=== Checking nginx status ==="
+            docker ps --filter 'name=mdclodging_nginx'
+
+            echo -e "\n=== Checking nginx logs ==="
+            docker logs mdclodging_nginx --tail 30
+
+            echo -e "\n=== Verifying certificate files inside container ==="
+            docker exec mdclodging_nginx ls -la /etc/letsencrypt/live/app.aneldida.com/ || echo "Certs not found"
+
+            echo -e "\n=== Testing nginx config ==="
+            docker exec mdclodging_nginx nginx -t 2>&1
+
+            echo -e "\n=== Testing HTTPS locally ==="
+            sleep 3
+            curl -k -I https://localhost 2>&1 | head -15
+          EOF
+
+      - name: Test external HTTPS access
+        run: |
+          echo "=== Testing external HTTPS access ==="
+          sleep 10
+
+          echo "Testing app.aneldida.com..."
+          curl -I https://app.aneldida.com 2>&1 | head -10
+
+          echo -e "\nTesting api.aneldida.com..."
+          curl -I https://api.aneldida.com/health 2>&1 | head -10
+
+          echo -e "\nTesting HTTP to HTTPS redirect..."
+          curl -I http://app.aneldida.com 2>&1 | head -10
