@@ -1,0 +1,40 @@
+name: Check Nginx Logs
+
+on:
+  workflow_dispatch:
+
+jobs:
+  check:
+    name: Check Nginx Logs
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/prod_key
+          chmod 600 ~/.ssh/prod_key
+          ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Check nginx logs and config
+        run: |
+          ssh -i ~/.ssh/prod_key ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
+            set -e
+
+            echo "=== Nginx Container Status ==="
+            docker ps -a --filter 'name=mdclodging_nginx'
+
+            echo -e "\n=== Nginx Logs (last 50 lines) ==="
+            docker logs mdclodging_nginx --tail 50 2>&1 || echo "Cannot get logs yet"
+
+            echo -e "\n=== Check nginx.conf exists and is readable ==="
+            ls -la /opt/mdclodging/nginx/nginx.conf
+            cat /opt/mdclodging/nginx/nginx.conf
+
+            echo -e "\n=== Check SSL certificates ==="
+            ls -la /opt/mdclodging/nginx/ssl/
+
+            echo -e "\n=== Try to test config when container is running ==="
+            sleep 2
+            docker exec mdclodging_nginx nginx -t 2>&1 || echo "Config test failed or container not running"
+          EOF
