@@ -1,0 +1,45 @@
+name: Force Rebuild Frontend
+
+on:
+  workflow_dispatch:
+
+jobs:
+  rebuild:
+    name: Force Rebuild Frontend Container
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 🔨 Force Rebuild Frontend
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd /opt/mdclodging
+
+            echo "🔨 Forcing frontend rebuild..."
+            docker compose -f docker-compose.prod.yml up -d --build --force-recreate frontend
+
+            echo ""
+            echo "⏳ Waiting for frontend to start..."
+            sleep 10
+
+            echo ""
+            echo "✅ Frontend rebuilt and restarted"
+
+            echo ""
+            echo "🧪 Testing frontend..."
+            if curl -f -s https://app.aneldida.com > /dev/null; then
+              echo "✅ Frontend is responding"
+            else
+              echo "❌ Frontend check failed"
+              exit 1
+            fi
+
+      - name: ✅ Done
+        if: success()
+        run: |
+          echo "✅ Frontend has been rebuilt"
+          echo "Check app.aneldida.com/login - subdomain field should now be gone"
+          echo "You may need to hard refresh (Ctrl+Shift+R) to clear browser cache"
