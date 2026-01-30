@@ -1,0 +1,46 @@
+name: Fix Server with Sudo
+
+on:
+  workflow_dispatch:
+
+jobs:
+  fix:
+    name: Remove Nginx and Update Code
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 🔧 Fix Server with Sudo
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd /opt/mdclodging
+
+            echo "🧹 Removing nginx folder with sudo..."
+            sudo rm -rf nginx/
+
+            echo ""
+            echo "📥 Fetching latest code..."
+            git fetch origin
+
+            echo ""
+            echo "🔄 Resetting to origin/master..."
+            git reset --hard origin/master
+
+            echo ""
+            echo "✅ Server updated successfully!"
+            echo "Current commit: $(git rev-parse HEAD | cut -c1-7)"
+            echo "Expected commit: 1095655"
+
+            echo ""
+            echo "📝 Files changed in this update:"
+            git log --oneline -5
+
+      - name: ✅ Fix Complete
+        if: success()
+        run: |
+          echo "✅ Server has been fixed and updated"
+          echo "The deploy script now uses git reset --hard"
+          echo "Future deployments should work automatically"
