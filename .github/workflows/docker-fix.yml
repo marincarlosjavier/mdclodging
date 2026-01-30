@@ -1,0 +1,45 @@
+name: Docker Fix
+
+on:
+  workflow_dispatch:
+
+jobs:
+  fix:
+    name: Fix Using Docker
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 🔧 Fix with Docker (runs as root)
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd /opt/mdclodging
+
+            echo "🧹 Using Docker to remove nginx files (Docker runs as root)..."
+            docker run --rm -v /opt/mdclodging:/workspace alpine:latest sh -c "rm -rf /workspace/nginx/"
+
+            echo ""
+            echo "📥 Fetching latest code..."
+            git fetch origin
+
+            echo ""
+            echo "🔄 Resetting to latest code..."
+            git reset --hard origin/master
+            git clean -fd
+
+            echo ""
+            echo "✅ Current commit: $(git rev-parse HEAD | cut -c1-7)"
+            echo "Expected: 7205c52"
+
+            echo ""
+            echo "🚀 Running deployment..."
+            bash scripts/deploy.sh
+
+      - name: ✅ Done
+        if: success()
+        run: |
+          echo "✅ Fixed and deployed!"
+          echo "The subdomain field should now be removed from app.aneldida.com/login"
