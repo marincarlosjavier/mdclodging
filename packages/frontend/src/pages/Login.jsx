@@ -12,8 +12,7 @@ export default function Login() {
 
   const [formData, setFormData] = useState({
     email: '',
-    password: '',
-    subdomain: ''
+    password: ''
   });
 
   const handleSubmit = async (e) => {
@@ -83,20 +82,6 @@ export default function Login() {
               />
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Subdominio (opcional)
-              </label>
-              <input
-                type="text"
-                name="subdomain"
-                value={formData.subdomain}
-                onChange={handleChange}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition"
-                placeholder="mi-hotel"
-              />
-            </div>
-
             <button
               type="submit"
               disabled={loading}
@@ -112,7 +97,6 @@ export default function Login() {
               Credenciales de Demo:
             </p>
             <p className="text-xs text-gray-500">Admin: admin@demo.com / admin123</p>
-            <p className="text-xs text-gray-500">Subdomain: demo</p>
           </div>
         </div>
       </div>
