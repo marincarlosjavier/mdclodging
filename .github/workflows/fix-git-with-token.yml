@@ -1,0 +1,48 @@
+name: Fix Git with Access Token
+
+on:
+  workflow_dispatch:
+
+jobs:
+  fix:
+    name: Configure Git with Token
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 🔧 Configure Git Remote with Token
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd /opt/mdclodging
+
+            echo "📋 Current remote configuration:"
+            git remote -v
+
+            echo ""
+            echo "🔧 Changing remote to use token authentication..."
+            # This will use the token from git credentials if configured
+            git remote set-url origin https://github.com/marincarlosjavier/mdclodging.git
+
+            echo ""
+            echo "🔧 Configuring git to use credential helper..."
+            git config credential.helper store
+
+            echo ""
+            echo "✅ New remote configuration:"
+            git remote -v
+
+            echo ""
+            echo "✅ Git is now configured to use HTTPS with stored credentials"
+            echo "Note: You'll need to add GITHUB_TOKEN to your deploy script or configure git credentials"
+
+      - name: ✅ Configuration Complete
+        if: success()
+        run: |
+          echo "✅ Git remote configured to use HTTPS"
+          echo "⚠️  Important: The server needs a GitHub token configured"
+          echo "You have two options:"
+          echo "1. Add 'git config --global credential.helper store' and do a manual git pull with token"
+          echo "2. Update the deploy script to use: git pull https://\$GITHUB_TOKEN@github.com/marincarlosjavier/mdclodging.git"
