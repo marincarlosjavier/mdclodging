@@ -31,7 +31,8 @@ if [ "$CURRENT_COMMIT" = "$LATEST_COMMIT" ]; then
 fi
 
 echo -e "${YELLOW}🔄 Updating from ${CURRENT_COMMIT:0:7} to ${LATEST_COMMIT:0:7}${NC}"
-git pull origin master
+# Use reset instead of pull to avoid conflicts with untracked files
+git reset --hard origin/master
 
 echo ""
 echo -e "${YELLOW}🔍 Checking for changes...${NC}"
