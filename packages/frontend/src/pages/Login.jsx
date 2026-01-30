@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { login } from '../store/slices/authSlice';
 import { toast } from 'react-toastify';
 import { Hotel } from 'lucide-react';
@@ -97,6 +97,16 @@ export default function Login() {
               Credenciales de Demo:
             </p>
             <p className="text-xs text-gray-500">Admin: admin@demo.com / admin123</p>
+          </div>
+
+          {/* Sign up link */}
+          <div className="mt-6 text-center">
+            <p className="text-sm text-gray-600">
+              ¿No tienes una cuenta?{' '}
+              <Link to="/signup" className="text-primary-600 hover:text-primary-700 font-medium">
+                Registrar nueva empresa
+              </Link>
+            </p>
           </div>
         </div>
       </div>

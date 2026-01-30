@@ -32,7 +32,16 @@ export default function Users() {
     }
   };
 
-  const handleDeleteUser = async (id) => {
+  const handleDeleteUser = async (id, user) => {
+    // Check if this is the superadministrator (first admin)
+    const adminUsers = users.filter(u => u.role === 'admin' || (Array.isArray(u.role) && u.role.includes('admin')));
+    const isSuperAdmin = adminUsers.length > 0 && adminUsers.sort((a, b) => a.id - b.id)[0].id === id;
+
+    if (isSuperAdmin) {
+      toast.error('No se puede eliminar al superadministrador. Siempre debe existir al menos un superadministrador.');
+      return;
+    }
+
     if (!confirm('¿Estás seguro de eliminar este usuario?')) return;
     try {
       await dispatch(deleteUser(id)).unwrap();
@@ -124,9 +133,20 @@ export default function Users() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-gray-600">{user.email}</td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${roleColors[user.role]}`}>
-                        {roleLabels[user.role]}
-                      </span>
+                      <div className="flex gap-2">
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${roleColors[user.role]}`}>
+                          {roleLabels[user.role]}
+                        </span>
+                        {(() => {
+                          const adminUsers = filteredUsers.filter(u => u.role === 'admin' || (Array.isArray(u.role) && u.role.includes('admin')));
+                          const isSuperAdmin = adminUsers.length > 0 && adminUsers.sort((a, b) => a.id - b.id)[0].id === user.id;
+                          return isSuperAdmin && (
+                            <span className="px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                              Superadmin
+                            </span>
+                          );
+                        })()}
+                      </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${
@@ -137,7 +157,7 @@ export default function Users() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
                       <button
-                        onClick={() => handleDeleteUser(user.id)}
+                        onClick={() => handleDeleteUser(user.id, user)}
                         className="text-red-600 hover:text-red-800 transition"
                       >
                         <Trash2 size={18} />
@@ -185,9 +205,13 @@ export default function Users() {
                     value={formData.password}
                     onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                     required
-                    minLength={6}
+                    minLength={12}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
+                    placeholder="Mínimo 12 caracteres"
                   />
+                  <p className="mt-1 text-xs text-gray-500">
+                    Debe tener al menos 12 caracteres, incluir mayúsculas, minúsculas, números y caracteres especiales
+                  </p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Rol</label>

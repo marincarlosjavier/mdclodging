@@ -277,12 +277,27 @@ router.delete('/:id', requireAdmin, asyncHandler(async (req, res) => {
 
   // Check if user exists
   const current = await pool.query(
-    'SELECT id, email FROM users WHERE id = $1 AND tenant_id = $2',
+    'SELECT id, email, role FROM users WHERE id = $1 AND tenant_id = $2',
     [id, req.tenantId]
   );
 
   if (current.rows.length === 0) {
     return res.status(404).json({ error: 'User not found' });
+  }
+
+  // Prevent deletion of the first superadministrator
+  // The first admin created for the tenant (lowest ID with admin role) cannot be deleted
+  const firstAdmin = await pool.query(
+    `SELECT id FROM users
+     WHERE tenant_id = $1 AND 'admin' = ANY(role)
+     ORDER BY id ASC LIMIT 1`,
+    [req.tenantId]
+  );
+
+  if (firstAdmin.rows.length > 0 && firstAdmin.rows[0].id === parseInt(id)) {
+    return res.status(403).json({
+      error: 'Cannot delete the superadministrator. There must always be at least one superadministrator for the organization.'
+    });
   }
 
   // Soft delete (deactivate) instead of hard delete
