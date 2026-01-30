@@ -22,25 +22,25 @@ jobs:
             git status --short
 
             echo ""
-            echo "🧹 Removing nginx folder with sudo (if exists)..."
-            sudo rm -rf nginx/ 2>/dev/null || echo "nginx folder already removed or doesn't exist"
+            echo "🧹 Forcefully removing nginx folder and files with sudo..."
+            sudo rm -rf nginx/
 
             echo ""
             echo "📥 Fetching latest code from GitHub..."
             git fetch origin
 
             echo ""
-            echo "🔄 Resetting to origin/master (this will discard local changes)..."
-            git reset --hard origin/master
+            echo "🔄 Resetting to origin/master with sudo (to handle root-owned files)..."
+            sudo git reset --hard origin/master
 
             echo ""
-            echo "🧹 Removing any remaining untracked files..."
-            git clean -fd
+            echo "🧹 Removing any remaining untracked files with sudo..."
+            sudo git clean -fd
 
             echo ""
             echo "✅ Server code updated successfully!"
             echo "Current commit: $(git rev-parse HEAD | cut -c1-7)"
-            echo "Expected commit: d9252be"
+            echo "Expected commit: 6707d4f"
 
             echo ""
             echo "📋 Verifying deploy script update..."
