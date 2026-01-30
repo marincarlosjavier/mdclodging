@@ -1,0 +1,36 @@
+name: Check Frontend Status
+
+on:
+  workflow_dispatch:
+
+jobs:
+  check:
+    name: Check Frontend Container Status
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 🔍 Check Frontend Status
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            echo "📋 Docker containers:"
+            docker ps -a --filter "name=mdclodging_frontend"
+
+            echo ""
+            echo "📋 Frontend container logs (last 50 lines):"
+            docker logs --tail 50 mdclodging_frontend
+
+            echo ""
+            echo "📋 Checking if frontend is responding on port 8080:"
+            curl -v http://localhost:8080 || echo "Frontend not responding"
+
+            echo ""
+            echo "📋 Checking nginx container:"
+            docker ps --filter "name=mdclodging_nginx"
+
+            echo ""
+            echo "📋 Nginx logs (last 20 lines):"
+            docker logs --tail 20 mdclodging_nginx 2>&1 || echo "No nginx container"
