@@ -1,0 +1,64 @@
+name: Fix Container Name
+
+on:
+  workflow_dispatch:
+
+jobs:
+  fix:
+    name: Fix Frontend Container Name
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 🔄 Recreate Container with Correct Name
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd /opt/mdclodging
+
+            echo "🛑 Removing old container..."
+            docker rm -f mdclodging_frontend || true
+            docker rm -f frontend || true
+
+            echo ""
+            echo "🚀 Starting frontend with correct name 'frontend'..."
+            docker run -d \
+              --name frontend \
+              --restart always \
+              --network mdclodging_mdclodging_network \
+              mdclodging-frontend:local
+
+            echo ""
+            echo "⏳ Waiting for frontend to start..."
+            sleep 10
+
+            echo ""
+            echo "📋 Container status:"
+            docker ps --filter "name=frontend"
+
+            echo ""
+            echo "🧪 Testing internal access..."
+            if docker exec mdclodging_nginx curl -f -s http://frontend:80 > /dev/null; then
+              echo "✅ Nginx can reach frontend container"
+            else
+              echo "⚠️ Nginx cannot reach frontend yet"
+            fi
+
+            echo ""
+            echo "🧪 Testing public access..."
+            sleep 5
+            if curl -f -s https://app.aneldida.com > /dev/null; then
+              echo "✅ Public site is responding"
+            else
+              echo "⚠️ Public site not responding yet"
+            fi
+
+      - name: ✅ Done
+        if: success()
+        run: |
+          echo "✅ Frontend container recreated with correct name"
+          echo "Go to app.aneldida.com/login"
+          echo "Hard refresh (Ctrl+Shift+R)"
+          echo "The subdomain field should be GONE"
