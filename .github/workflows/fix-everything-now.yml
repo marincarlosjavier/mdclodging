@@ -1,0 +1,46 @@
+name: Fix Everything Now
+
+on:
+  workflow_dispatch:
+
+jobs:
+  fix-all:
+    name: Fix All Issues and Deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 🔧 Fix Everything
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            echo "🔧 Step 1: Setting up passwordless sudo..."
+            echo "mdclodging ALL=(ALL) NOPASSWD: ALL" | sudo tee /etc/sudoers.d/mdclodging
+            sudo chmod 0440 /etc/sudoers.d/mdclodging
+
+            cd /opt/mdclodging
+
+            echo ""
+            echo "🧹 Step 2: Removing nginx folder..."
+            sudo rm -rf nginx/
+
+            echo ""
+            echo "📥 Step 3: Updating code from GitHub..."
+            git fetch origin
+            sudo git reset --hard origin/master
+            sudo git clean -fd
+
+            echo ""
+            echo "✅ Current commit: $(git rev-parse HEAD | cut -c1-7)"
+
+            echo ""
+            echo "🚀 Step 4: Deploying..."
+            bash scripts/deploy.sh
+
+      - name: ✅ Done
+        if: success()
+        run: |
+          echo "✅ Everything is fixed and deployed!"
+          echo "Check app.aneldida.com/login - the subdomain field should be gone"
