@@ -1,0 +1,45 @@
+name: Check Server Code
+
+on:
+  workflow_dispatch:
+
+jobs:
+  check:
+    name: Check Login.jsx on Server
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📋 Check Server Files
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd /opt/mdclodging
+
+            echo "📋 Current commit:"
+            git log -1 --oneline
+
+            echo ""
+            echo "📋 Checking Login.jsx for subdomain field..."
+            if grep -q "subdomain" packages/frontend/src/pages/Login.jsx; then
+              echo "❌ SUBDOMAIN FIELD FOUND in Login.jsx!"
+              echo ""
+              echo "Lines with 'subdomain':"
+              grep -n "subdomain" packages/frontend/src/pages/Login.jsx
+            else
+              echo "✅ No subdomain field in Login.jsx"
+            fi
+
+            echo ""
+            echo "📋 Checking formData state:"
+            grep -A 3 "useState({" packages/frontend/src/pages/Login.jsx
+
+            echo ""
+            echo "📋 Docker containers:"
+            docker ps --filter "name=mdclodging_frontend"
+
+            echo ""
+            echo "📋 Frontend container details:"
+            docker inspect mdclodging_frontend --format='{{.Created}}'
