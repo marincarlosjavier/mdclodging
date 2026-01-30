@@ -47,7 +47,7 @@ export default function Login() {
             MDCLodging
           </h1>
           <p className="text-center text-gray-600 mb-8">
-            Sistema de Gestión Hotelera
+            Sistema de Gestión Hotelera - Bienvenido
           </p>
 
           {/* Form */}
