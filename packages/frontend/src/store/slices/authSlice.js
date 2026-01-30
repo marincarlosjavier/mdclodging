@@ -21,9 +21,9 @@ const initialState = {
 // Async thunks
 export const login = createAsyncThunk(
   'auth/login',
-  async ({ email, password, subdomain }, { rejectWithValue }) => {
+  async ({ email, password }, { rejectWithValue }) => {
     try {
-      const response = await authAPI.login(email, password, subdomain);
+      const response = await authAPI.login(email, password);
       const { token, user } = response.data;
 
       localStorage.setItem('token', token);

@@ -14,6 +14,7 @@ export const authLimiter = rateLimit({
   standardHeaders: true, // Return rate limit info in `RateLimit-*` headers
   legacyHeaders: false, // Disable `X-RateLimit-*` headers
   skipSuccessfulRequests: false, // Count successful requests
+  validate: { trustProxy: false }, // Disable validation since we configure trust proxy at app level
   handler: (req, res) => {
     res.status(429).json({
       error: 'Demasiados intentos de inicio de sesión',
@@ -36,6 +37,7 @@ export const apiLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { trustProxy: false }, // Disable validation since we configure trust proxy at app level
   handler: (req, res) => {
     res.status(429).json({
       error: 'Demasiadas solicitudes',
@@ -58,6 +60,7 @@ export const strictLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { trustProxy: false }, // Disable validation since we configure trust proxy at app level
   handler: (req, res) => {
     res.status(429).json({
       error: 'Demasiados intentos',
@@ -75,5 +78,6 @@ export const publicLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 200, // 200 requests per window
   standardHeaders: true,
-  legacyHeaders: false
+  legacyHeaders: false,
+  validate: { trustProxy: false } // Disable validation since we configure trust proxy at app level
 });

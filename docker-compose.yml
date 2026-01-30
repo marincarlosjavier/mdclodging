@@ -10,7 +10,7 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: password
     ports:
-      - "5432:5432"
+      - "5434:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -39,7 +39,7 @@ services:
       JWT_SECRET: ${JWT_SECRET:-your_super_secret_jwt_key_change_in_production}
       CORS_ORIGIN: http://localhost:5173
     ports:
-      - "3000:3000"
+      - "3005:3000"
     depends_on:
       postgres:
         condition: service_healthy

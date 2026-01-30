@@ -36,7 +36,7 @@ export const validateLogin = [
     .withMessage('Password must be between 1 and 255 characters'),
 
   body('subdomain')
-    .optional()
+    .optional({ values: 'falsy' })
     .trim()
     .matches(/^[a-z0-9-]+$/)
     .withMessage('Subdomain can only contain lowercase letters, numbers, and hyphens')

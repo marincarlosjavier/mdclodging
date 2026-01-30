@@ -31,7 +31,14 @@ const router = express.Router();
  * POST /api/auth/login
  * Login with email and password
  */
-router.post('/login', authLimiter, validateLogin, asyncHandler(async (req, res) => {
+router.post('/login', authLimiter, (req, res, next) => {
+  console.log('Login request received:', {
+    body: req.body,
+    headers: req.headers['content-type'],
+    method: req.method
+  });
+  next();
+}, validateLogin, asyncHandler(async (req, res) => {
   const { email, password, subdomain } = req.body;
 
   // Find user with tenant

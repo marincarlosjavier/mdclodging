@@ -47,8 +47,8 @@ export default api;
 
 // Auth API
 export const authAPI = {
-  login: (email, password, subdomain) =>
-    api.post('/auth/login', { email, password, subdomain }),
+  login: (email, password) =>
+    api.post('/auth/login', { email, password }),
 
   registerTenant: (data) =>
     api.post('/auth/register-tenant', data),

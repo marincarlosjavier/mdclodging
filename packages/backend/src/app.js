@@ -30,6 +30,10 @@ dotenv.config();
 
 const app = express();
 
+// Trust proxy - needed when behind nginx/reverse proxy
+// Trust only the first proxy hop (nginx in our case)
+app.set('trust proxy', 1);
+
 // Security middleware
 app.use(helmet());
 
