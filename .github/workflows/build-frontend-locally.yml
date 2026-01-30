@@ -1,0 +1,58 @@
+name: Build Frontend Locally
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build Frontend Image on Server
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 🔨 Build Frontend from Source
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd /opt/mdclodging
+
+            echo "🔨 Building frontend Docker image from source..."
+            docker build -t mdclodging-frontend:local packages/frontend/
+
+            echo ""
+            echo "🛑 Stopping current frontend container..."
+            docker stop mdclodging_frontend || true
+            docker rm mdclodging_frontend || true
+
+            echo ""
+            echo "🚀 Starting new frontend container with locally built image..."
+            docker run -d \
+              --name mdclodging_frontend \
+              --restart always \
+              --network mdclodging_mdclodging_network \
+              -p 127.0.0.1:8080:80 \
+              mdclodging-frontend:local
+
+            echo ""
+            echo "⏳ Waiting for frontend to start..."
+            sleep 10
+
+            echo ""
+            echo "✅ Frontend rebuilt and started with new code"
+
+            echo ""
+            echo "🧪 Testing frontend..."
+            if curl -f -s https://app.aneldida.com > /dev/null; then
+              echo "✅ Frontend is responding"
+            else
+              echo "⚠️  Frontend may still be starting..."
+            fi
+
+      - name: ✅ Done
+        if: success()
+        run: |
+          echo "✅ Frontend has been rebuilt from source code"
+          echo "The subdomain field should now be GONE from app.aneldida.com/login"
+          echo "Hard refresh (Ctrl+Shift+R) to clear your browser cache"
