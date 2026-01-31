@@ -21,12 +21,14 @@ import {
   DollarSign
 } from 'lucide-react';
 import { useState } from 'react';
+import ConfirmModal from './ConfirmModal';
 
 export default function Layout() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const { user } = useSelector((state) => state.auth);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
 
   const handleLogout = () => {
     dispatch(logout());
@@ -163,7 +165,7 @@ export default function Layout() {
           {/* Logout button */}
           <div className="p-4 border-t border-gray-200">
             <button
-              onClick={handleLogout}
+              onClick={() => setShowLogoutModal(true)}
               className="flex items-center gap-3 w-full px-4 py-3 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
             >
               <LogOut size={20} />
@@ -194,6 +196,17 @@ export default function Layout() {
           <Outlet />
         </main>
       </div>
+
+      {/* Logout Confirmation Modal */}
+      <ConfirmModal
+        isOpen={showLogoutModal}
+        onClose={() => setShowLogoutModal(false)}
+        onConfirm={handleLogout}
+        title="Cerrar Sesión"
+        message="¿Estás seguro de que deseas cerrar sesión?"
+        confirmText="Cerrar Sesión"
+        cancelText="Cancelar"
+      />
     </div>
   );
 }

@@ -3,12 +3,15 @@ import { useDispatch, useSelector } from 'react-redux';
 import { fetchUsers, createUser, deleteUser } from '../store/slices/usersSlice';
 import { Plus, Search, Edit, Trash2 } from 'lucide-react';
 import { toast } from 'react-toastify';
+import ConfirmModal from '../components/ConfirmModal';
 
 export default function Users() {
   const dispatch = useDispatch();
   const { users, loading } = useSelector((state) => state.users);
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [userToDelete, setUserToDelete] = useState(null);
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -32,20 +35,27 @@ export default function Users() {
     }
   };
 
-  const handleDeleteUser = async (id, user) => {
+  const handleDeleteClick = (user) => {
     // Check if this is the superadministrator (first admin)
     const adminUsers = users.filter(u => u.role === 'admin' || (Array.isArray(u.role) && u.role.includes('admin')));
-    const isSuperAdmin = adminUsers.length > 0 && adminUsers.sort((a, b) => a.id - b.id)[0].id === id;
+    const isSuperAdmin = adminUsers.length > 0 && adminUsers.sort((a, b) => a.id - b.id)[0].id === user.id;
 
     if (isSuperAdmin) {
       toast.error('No se puede eliminar al superadministrador. Siempre debe existir al menos un superadministrador.');
       return;
     }
 
-    if (!confirm('¿Estás seguro de eliminar este usuario?')) return;
+    setUserToDelete(user);
+    setShowDeleteModal(true);
+  };
+
+  const handleDeleteUser = async () => {
+    if (!userToDelete) return;
+
     try {
-      await dispatch(deleteUser(id)).unwrap();
+      await dispatch(deleteUser(userToDelete.id)).unwrap();
       toast.success('Usuario eliminado correctamente');
+      setUserToDelete(null);
     } catch (error) {
       // Error already handled
     }
@@ -157,7 +167,7 @@ export default function Users() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
                       <button
-                        onClick={() => handleDeleteUser(user.id, user)}
+                        onClick={() => handleDeleteClick(user)}
                         className="text-red-600 hover:text-red-800 transition"
                       >
                         <Trash2 size={18} />
@@ -247,6 +257,20 @@ export default function Users() {
           </div>
         </div>
       )}
+
+      {/* Delete User Confirmation Modal */}
+      <ConfirmModal
+        isOpen={showDeleteModal}
+        onClose={() => {
+          setShowDeleteModal(false);
+          setUserToDelete(null);
+        }}
+        onConfirm={handleDeleteUser}
+        title="Eliminar Usuario"
+        message={`¿Estás seguro de que deseas eliminar al usuario ${userToDelete?.full_name}? Esta acción desactivará la cuenta.`}
+        confirmText="Eliminar"
+        cancelText="Cancelar"
+      />
     </div>
   );
 }
