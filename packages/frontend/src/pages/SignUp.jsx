@@ -13,7 +13,6 @@ export default function SignUp() {
 
   const [formData, setFormData] = useState({
     tenantName: '',
-    subdomain: '',
     adminEmail: '',
     adminFullName: '',
     adminPassword: '',
@@ -36,12 +35,18 @@ export default function SignUp() {
       return;
     }
 
+    // Auto-generate subdomain from tenant name
+    const subdomain = formData.tenantName
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, '')
+      .substring(0, 20) || `tenant${Date.now()}`;
+
     setLoading(true);
     try {
       await dispatch(registerTenant({
         tenant: {
           name: formData.tenantName,
-          subdomain: formData.subdomain.toLowerCase().trim()
+          subdomain: subdomain
         },
         admin: {
           email: formData.adminEmail,
@@ -62,15 +67,6 @@ export default function SignUp() {
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData({ ...formData, [name]: value });
-
-    // Auto-generate subdomain from tenant name
-    if (name === 'tenantName' && !formData.subdomain) {
-      const subdomain = value
-        .toLowerCase()
-        .replace(/[^a-z0-9]/g, '')
-        .substring(0, 20);
-      setFormData(prev => ({ ...prev, subdomain }));
-    }
   };
 
   return (
@@ -111,30 +107,6 @@ export default function SignUp() {
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition"
                   placeholder="Ej: Hotel Paradise"
                 />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Subdominio *
-                </label>
-                <div className="flex items-center">
-                  <input
-                    type="text"
-                    name="subdomain"
-                    value={formData.subdomain}
-                    onChange={handleChange}
-                    required
-                    pattern="[a-z0-9]+"
-                    className="flex-1 px-4 py-3 border border-gray-300 rounded-l-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition"
-                    placeholder="hotelparadise"
-                  />
-                  <span className="px-4 py-3 bg-gray-100 border border-l-0 border-gray-300 rounded-r-lg text-gray-600">
-                    .mdclodging.com
-                  </span>
-                </div>
-                <p className="mt-1 text-xs text-gray-500">
-                  Solo letras minúsculas y números, sin espacios ni caracteres especiales
-                </p>
               </div>
             </div>
 
