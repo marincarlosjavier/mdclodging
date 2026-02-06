@@ -105,7 +105,13 @@
       "Bash(docker restart:*)",
       "Bash(docker cp:*)",
       "Bash(docker port:*)",
-      "WebFetch(domain:api.github.com)"
+      "WebFetch(domain:api.github.com)",
+      "Bash(pg_ctl status:*)",
+      "Bash(powershell.exe \"Get-Service | Where-Object {$_Name -like ''*postgres*''}\")",
+      "Bash(where:*)",
+      "Bash(checked_in, checked_out\" when updating reservation dates.\n\nCo-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(start cmd /c \"npm run dev\")",
+      "Bash(12 characters or more\" error message even though the backend now \naccepts 8 characters.\n\nCo-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>\nEOF\n\\)\")"
     ]
   }
 }

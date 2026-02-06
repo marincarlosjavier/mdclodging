@@ -787,7 +787,7 @@ async function handleCallback(ctx) {
         'Para comenzar, necesitas vincular tu cuenta de Telegram.\n\n' +
         '📝 Solicita un código de vinculación a tu administrador.\n\n' +
         '⚠️ *IMPORTANTE:* El código debe enviarse en *MAYÚSCULAS*.\n' +
-        '(El código tiene 8 caracteres alfanuméricos)\n\n' +
+        '(El código tiene 6 caracteres alfanuméricos)\n\n' +
         'Ingresa el código aquí:',
         { parse_mode: 'Markdown' }
       );

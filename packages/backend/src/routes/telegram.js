@@ -171,8 +171,8 @@ router.post('/generate-link-code', requireSupervisor, asyncHandler(async (req, r
     });
   }
 
-  // Generate unique code (6-8 characters)
-  const code = Math.random().toString(36).substring(2, 10).toUpperCase();
+  // Generate unique code (6 characters)
+  const code = Math.random().toString(36).substring(2, 8).toUpperCase();
   const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 
   await pool.query(
