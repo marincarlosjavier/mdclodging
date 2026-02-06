@@ -99,7 +99,10 @@ router.post('/', requireSupervisor, checkUserQuota, validateCreateUser, asyncHan
   const { email, password, full_name, role } = req.body;
 
   // Only admins can create other admins
-  if (role === 'admin' && req.user.role !== 'admin') {
+  const userRoles = Array.isArray(req.user.role) ? req.user.role : [req.user.role];
+  const isAdmin = userRoles.includes('admin');
+
+  if (role === 'admin' && !isAdmin) {
     return res.status(403).json({ error: 'Only admins can create admin users' });
   }
 
@@ -146,7 +149,10 @@ router.put('/:id', requireSupervisor, validateUpdateUser, asyncHandler(async (re
   }
 
   // Only admins can change roles or deactivate users
-  if ((role || is_active !== undefined) && req.user.role !== 'admin') {
+  const userRoles = Array.isArray(req.user.role) ? req.user.role : [req.user.role];
+  const isAdmin = userRoles.includes('admin');
+
+  if ((role || is_active !== undefined) && !isAdmin) {
     return res.status(403).json({ error: 'Only admins can change roles or active status' });
   }
 
@@ -205,8 +211,12 @@ router.put('/:id/password', validatePasswordChange, asyncHandler(async (req, res
   const { id } = req.params;
   const { current_password, new_password } = req.body;
 
+  // Check if user is admin
+  const userRoles = Array.isArray(req.user.role) ? req.user.role : [req.user.role];
+  const isAdmin = userRoles.includes('admin');
+
   // Users can only change their own password, unless they're admin
-  if (req.user.id !== parseInt(id) && req.user.role !== 'admin') {
+  if (req.user.id !== parseInt(id) && !isAdmin) {
     return res.status(403).json({ error: 'Cannot change other users passwords' });
   }
 
@@ -221,7 +231,7 @@ router.put('/:id/password', validatePasswordChange, asyncHandler(async (req, res
   }
 
   // Verify current password (if not admin)
-  if (req.user.role !== 'admin') {
+  if (!isAdmin) {
     if (!current_password) {
       return res.status(400).json({ error: 'Current password required' });
     }
