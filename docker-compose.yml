@@ -5,14 +5,15 @@ services:
   postgres:
     image: postgres:16-alpine
     container_name: mdclodging_postgres
+    restart: unless-stopped
     environment:
-      POSTGRES_DB: mdclodging
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
-    ports:
-      - "5434:5432"
+      - POSTGRES_USER=${DB_USER:-postgres}
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-password}
+      - POSTGRES_DB=${DB_NAME:-mdclodging}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
@@ -27,41 +28,56 @@ services:
       context: ./packages/backend
       dockerfile: Dockerfile
     container_name: mdclodging_backend
-    environment:
-      NODE_ENV: development
-      PORT: 3000
-      DATABASE_URL: postgresql://postgres:password@postgres:5432/mdclodging
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_NAME: mdclodging
-      DB_USER: postgres
-      DB_PASSWORD: password
-      JWT_SECRET: ${JWT_SECRET:-your_super_secret_jwt_key_change_in_production}
-      CORS_ORIGIN: http://localhost:5173
+    restart: unless-stopped
     ports:
-      - "3005:3000"
+      - "3000:3000"
+    environment:
+      - NODE_ENV=${NODE_ENV:-development}
+      - PORT=${PORT:-3000}
+      - DATABASE_URL=${DATABASE_URL}
+      - DB_HOST=${DB_HOST:-postgres}
+      - DB_PORT=${DB_PORT:-5432}
+      - DB_NAME=${DB_NAME:-mdclodging}
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_EXPIRATION=${JWT_EXPIRATION:-7d}
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:5173}
+      - BACKEND_URL=${BACKEND_URL:-http://localhost:3000}
+      - CORS_ORIGIN=${CORS_ORIGIN:-http://localhost:5173}
+      - RATE_LIMIT_WINDOW=${RATE_LIMIT_WINDOW:-15}
+      - RATE_LIMIT_MAX=${RATE_LIMIT_MAX:-100}
+      - BCRYPT_ROUNDS=${BCRYPT_ROUNDS:-10}
     depends_on:
       postgres:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
     volumes:
       - ./packages/backend/uploads:/app/uploads
     networks:
       - mdclodging_network
-    restart: unless-stopped
 
   # Frontend
   frontend:
     build:
       context: ./packages/frontend
       dockerfile: Dockerfile
+      args:
+        - VITE_API_URL=${VITE_API_URL:-/api}
     container_name: mdclodging_frontend
+    restart: unless-stopped
     ports:
-      - "5173:80"
+      - "8080:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     networks:
       - mdclodging_network
-    restart: unless-stopped
 
 volumes:
   postgres_data:
