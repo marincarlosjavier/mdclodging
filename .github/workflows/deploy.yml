@@ -19,7 +19,7 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             cd /opt/mdclodging
-            bash scripts/deploy.sh
+            bash deploy.sh
 
       - name: ✅ Deployment Complete
         if: success()
