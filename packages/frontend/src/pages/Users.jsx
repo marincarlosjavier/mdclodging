@@ -215,7 +215,7 @@ export default function Users() {
                     value={formData.password}
                     onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                     required
-                    minLength={12}
+                    minLength={8}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
                     placeholder="Mínimo 8 caracteres"
                   />

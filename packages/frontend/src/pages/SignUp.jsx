@@ -154,7 +154,7 @@ export default function SignUp() {
                   value={formData.adminPassword}
                   onChange={handleChange}
                   required
-                  minLength={12}
+                  minLength={8}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition"
                   placeholder="Mínimo 8 caracteres"
                 />
@@ -173,7 +173,7 @@ export default function SignUp() {
                   value={formData.confirmPassword}
                   onChange={handleChange}
                   required
-                  minLength={12}
+                  minLength={8}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition"
                   placeholder="Repite tu contraseña"
                 />
