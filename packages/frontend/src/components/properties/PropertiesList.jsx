@@ -3,6 +3,7 @@ import { Plus, Search, Edit, Trash2, Home } from 'lucide-react';
 import api from '../../services/api';
 import { toast } from 'react-toastify';
 import PropertyModal from './PropertyModal';
+import ConfirmModal from '../ConfirmModal';
 
 export default function PropertiesList() {
   const [properties, setProperties] = useState([]);
@@ -10,6 +11,8 @@ export default function PropertiesList() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [selectedProperty, setSelectedProperty] = useState(null);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [propertyToDelete, setPropertyToDelete] = useState(null);
   const [filters, setFilters] = useState({
     search: '',
     property_type_id: '',
@@ -47,15 +50,22 @@ export default function PropertiesList() {
     setShowModal(true);
   };
 
-  const handleDelete = async (id) => {
-    if (!confirm('¿Está seguro de eliminar esta propiedad?')) return;
+  const handleDelete = (property) => {
+    setPropertyToDelete(property);
+    setShowConfirmModal(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!propertyToDelete) return;
 
     try {
-      await api.delete(`/properties/${id}`);
+      await api.delete(`/properties/${propertyToDelete.id}`);
       toast.success('Propiedad eliminada correctamente');
       loadData();
     } catch (error) {
       toast.error(error.response?.data?.error || 'Error al eliminar propiedad');
+    } finally {
+      setPropertyToDelete(null);
     }
   };
 
@@ -206,7 +216,7 @@ export default function PropertiesList() {
                     <Edit size={16} />
                   </button>
                   <button
-                    onClick={() => handleDelete(property.id)}
+                    onClick={() => handleDelete(property)}
                     className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition"
                     title="Eliminar"
                   >
@@ -227,6 +237,20 @@ export default function PropertiesList() {
           onClose={handleCloseModal}
         />
       )}
+
+      {/* Confirm Delete Modal */}
+      <ConfirmModal
+        isOpen={showConfirmModal}
+        onClose={() => {
+          setShowConfirmModal(false);
+          setPropertyToDelete(null);
+        }}
+        onConfirm={confirmDelete}
+        title="Eliminar Propiedad"
+        message={`¿Está seguro de eliminar la propiedad "${propertyToDelete?.name}"?`}
+        confirmText="Eliminar"
+        cancelText="Cancelar"
+      />
     </div>
   );
 }

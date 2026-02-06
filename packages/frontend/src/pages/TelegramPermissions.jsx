@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { telegramAPI } from '../services/api';
 import { toast } from 'react-toastify';
 import { Shield, Plus, Edit2, Trash2, X, Check, AlertCircle } from 'lucide-react';
+import ConfirmModal from '../components/ConfirmModal';
 
 export default function TelegramPermissions() {
   const [permissions, setPermissions] = useState([]);
@@ -15,6 +16,8 @@ export default function TelegramPermissions() {
     permissions: {}
   });
   const [jsonError, setJsonError] = useState('');
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [permissionToDelete, setPermissionToDelete] = useState(null);
 
   useEffect(() => {
     fetchPermissions();
@@ -88,13 +91,16 @@ export default function TelegramPermissions() {
     }
   };
 
-  const handleDelete = async (permission) => {
-    if (!confirm(`¿Estás seguro de eliminar el permiso "${permission.name}"?`)) {
-      return;
-    }
+  const handleDelete = (permission) => {
+    setPermissionToDelete(permission);
+    setShowConfirmModal(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!permissionToDelete) return;
 
     try {
-      const response = await telegramAPI.deletePermission(permission.id);
+      const response = await telegramAPI.deletePermission(permissionToDelete.id);
       if (response.data.soft_delete) {
         toast.info('Permiso desactivado (está en uso)');
       } else {
@@ -103,6 +109,8 @@ export default function TelegramPermissions() {
       fetchPermissions();
     } catch (error) {
       // Error already handled
+    } finally {
+      setPermissionToDelete(null);
     }
   };
 
@@ -348,6 +356,20 @@ export default function TelegramPermissions() {
           </div>
         </div>
       )}
+
+      {/* Confirm Delete Modal */}
+      <ConfirmModal
+        isOpen={showConfirmModal}
+        onClose={() => {
+          setShowConfirmModal(false);
+          setPermissionToDelete(null);
+        }}
+        onConfirm={confirmDelete}
+        title="Eliminar Permiso"
+        message={`¿Está seguro de eliminar el permiso "${permissionToDelete?.name}"?`}
+        confirmText="Eliminar"
+        cancelText="Cancelar"
+      />
     </div>
   );
 }

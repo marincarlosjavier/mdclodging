@@ -3,6 +3,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { fetchCatalogItems, createCatalogItem, updateCatalogItem, deleteCatalogItem } from '../store/slices/catalogSlice';
 import { Plus, Search, MapPin, UtensilsCrossed, Sofa, Bed, Trash2, Edit } from 'lucide-react';
 import { toast } from 'react-toastify';
+import ConfirmModal from '../components/ConfirmModal';
 
 const CATALOG_CATEGORIES = [
   { id: 'location', label: 'Ubicaciones', icon: MapPin, types: ['department', 'city', 'zone'] },
@@ -26,6 +27,8 @@ export default function Catalog() {
     parent_id: null
   });
   const [availableParents, setAvailableParents] = useState([]);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState(null);
 
   useEffect(() => {
     dispatch(fetchCatalogItems({ category: activeCategory }));
@@ -87,13 +90,20 @@ export default function Catalog() {
     setShowModal(true);
   };
 
-  const handleDelete = async (id) => {
-    if (!confirm('¿Estás seguro de eliminar este ítem?')) return;
+  const handleDelete = (item) => {
+    setItemToDelete(item);
+    setShowConfirmModal(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!itemToDelete) return;
     try {
-      await dispatch(deleteCatalogItem(id)).unwrap();
+      await dispatch(deleteCatalogItem(itemToDelete.id)).unwrap();
       toast.success('Ítem eliminado correctamente');
     } catch (error) {
       // Error already handled by interceptor
+    } finally {
+      setItemToDelete(null);
     }
   };
 
@@ -246,7 +256,7 @@ export default function Catalog() {
                         <Edit size={18} />
                       </button>
                       <button
-                        onClick={() => handleDelete(item.id)}
+                        onClick={() => handleDelete(item)}
                         className="text-red-600 hover:text-red-900"
                       >
                         <Trash2 size={18} />
@@ -355,6 +365,20 @@ export default function Catalog() {
           </div>
         </div>
       )}
+
+      {/* Confirm Delete Modal */}
+      <ConfirmModal
+        isOpen={showConfirmModal}
+        onClose={() => {
+          setShowConfirmModal(false);
+          setItemToDelete(null);
+        }}
+        onConfirm={confirmDelete}
+        title="Eliminar Ítem"
+        message={`¿Está seguro de eliminar el ítem "${itemToDelete?.name}"?`}
+        confirmText="Eliminar"
+        cancelText="Cancelar"
+      />
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { fetchPropertyTypes, deletePropertyType } from '../store/slices/property
 import { Plus, Search, Building2, Bed, Home, Edit, Trash2, Eye, MapPin, Bath, Armchair } from 'lucide-react';
 import { toast } from 'react-toastify';
 import PropertyTypeModal from '../components/propertyTypes/PropertyTypeModal';
+import ConfirmModal from '../components/ConfirmModal';
 
 export default function PropertyTypes() {
   const dispatch = useDispatch();
@@ -12,18 +13,27 @@ export default function PropertyTypes() {
   const [showModal, setShowModal] = useState(false);
   const [editingType, setEditingType] = useState(null);
   const [categoryFilter, setCategoryFilter] = useState('');
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [typeToDelete, setTypeToDelete] = useState(null);
 
   useEffect(() => {
     dispatch(fetchPropertyTypes());
   }, [dispatch]);
 
-  const handleDelete = async (id) => {
-    if (!confirm('¿Estás seguro de eliminar este tipo de propiedad?')) return;
+  const handleDelete = (type) => {
+    setTypeToDelete(type);
+    setShowConfirmModal(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!typeToDelete) return;
     try {
-      await dispatch(deletePropertyType(id)).unwrap();
+      await dispatch(deletePropertyType(typeToDelete.id)).unwrap();
       toast.success('Tipo de propiedad eliminado correctamente');
     } catch (error) {
       // Error already handled by interceptor
+    } finally {
+      setTypeToDelete(null);
     }
   };
 
@@ -253,7 +263,7 @@ export default function PropertyTypes() {
                   Editar
                 </button>
                 <button
-                  onClick={() => handleDelete(type.id)}
+                  onClick={() => handleDelete(type)}
                   className="flex items-center justify-center gap-2 px-4 py-2 text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition"
                 >
                   <Trash2 size={16} />
@@ -271,6 +281,20 @@ export default function PropertyTypes() {
           onClose={handleModalClose}
         />
       )}
+
+      {/* Confirm Delete Modal */}
+      <ConfirmModal
+        isOpen={showConfirmModal}
+        onClose={() => {
+          setShowConfirmModal(false);
+          setTypeToDelete(null);
+        }}
+        onConfirm={confirmDelete}
+        title="Eliminar Tipo de Propiedad"
+        message={`¿Está seguro de eliminar el tipo de propiedad "${typeToDelete?.name}"?`}
+        confirmText="Eliminar"
+        cancelText="Cancelar"
+      />
     </div>
   );
 }

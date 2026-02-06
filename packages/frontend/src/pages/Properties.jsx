@@ -4,6 +4,7 @@ import { fetchProperties, createProperty, updateProperty, deleteProperty } from 
 import { fetchPropertyTypes } from '../store/slices/propertyTypesSlice';
 import { Plus, Search, Building2, MapPin, Bed, Edit, Trash2, Filter, X } from 'lucide-react';
 import { toast } from 'react-toastify';
+import ConfirmModal from '../components/ConfirmModal';
 
 export default function Properties() {
   const dispatch = useDispatch();
@@ -20,19 +21,28 @@ export default function Properties() {
     status: 'available',
     notes: ''
   });
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [propertyToDelete, setPropertyToDelete] = useState(null);
 
   useEffect(() => {
     dispatch(fetchProperties());
     dispatch(fetchPropertyTypes());
   }, [dispatch]);
 
-  const handleDelete = async (id) => {
-    if (!confirm('¿Estás seguro de eliminar esta propiedad?')) return;
+  const handleDelete = (property) => {
+    setPropertyToDelete(property);
+    setShowConfirmModal(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!propertyToDelete) return;
     try {
-      await dispatch(deleteProperty(id)).unwrap();
+      await dispatch(deleteProperty(propertyToDelete.id)).unwrap();
       toast.success('Propiedad eliminada correctamente');
     } catch (error) {
       // Error already handled by interceptor
+    } finally {
+      setPropertyToDelete(null);
     }
   };
 
@@ -288,7 +298,7 @@ export default function Properties() {
                         <Edit size={18} />
                       </button>
                       <button
-                        onClick={() => handleDelete(property.id)}
+                        onClick={() => handleDelete(property)}
                         className="text-red-600 hover:text-red-900"
                         title="Eliminar"
                       >
@@ -404,6 +414,20 @@ export default function Properties() {
           </div>
         </div>
       )}
+
+      {/* Confirm Delete Modal */}
+      <ConfirmModal
+        isOpen={showConfirmModal}
+        onClose={() => {
+          setShowConfirmModal(false);
+          setPropertyToDelete(null);
+        }}
+        onConfirm={confirmDelete}
+        title="Eliminar Propiedad"
+        message={`¿Está seguro de eliminar la propiedad "${propertyToDelete?.name}"?`}
+        confirmText="Eliminar"
+        cancelText="Cancelar"
+      />
     </div>
   );
 }

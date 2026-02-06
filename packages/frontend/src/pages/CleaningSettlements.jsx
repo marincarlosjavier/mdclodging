@@ -6,6 +6,7 @@ import {
   Eye, Check, X, Plus, Edit2, Trash2, AlertCircle, Download
 } from 'lucide-react';
 import api from '../services/api';
+import ConfirmModal from '../components/ConfirmModal';
 
 const TASK_TYPE_EMOJI = {
   check_out: '🚪',
@@ -62,6 +63,8 @@ export default function CleaningSettlements() {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showRateModal, setShowRateModal] = useState(false);
   const [showReviewModal, setShowReviewModal] = useState(false);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [rateToDelete, setRateToDelete] = useState(null);
 
   const [filters, setFilters] = useState({
     status: '',
@@ -164,15 +167,22 @@ export default function CleaningSettlements() {
     }
   };
 
-  const handleDeleteRate = async (id) => {
-    if (!confirm('¿Estás seguro de eliminar esta tarifa?')) return;
+  const handleDeleteRate = (rate) => {
+    setRateToDelete(rate);
+    setShowConfirmModal(true);
+  };
+
+  const confirmDeleteRate = async () => {
+    if (!rateToDelete) return;
 
     try {
-      await api.delete(`/cleaning-settlements/rates/${id}`);
+      await api.delete(`/cleaning-settlements/rates/${rateToDelete.id}`);
       toast.success('Tarifa eliminada');
       fetchRates();
     } catch (error) {
       // Error already handled
+    } finally {
+      setRateToDelete(null);
     }
   };
 
@@ -441,7 +451,7 @@ export default function CleaningSettlements() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right">
                         <button
-                          onClick={() => handleDeleteRate(rate.id)}
+                          onClick={() => handleDeleteRate(rate)}
                           className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
                           title="Eliminar"
                         >
@@ -844,6 +854,20 @@ export default function CleaningSettlements() {
           </div>
         </div>
       )}
+
+      {/* Confirm Delete Modal */}
+      <ConfirmModal
+        isOpen={showConfirmModal}
+        onClose={() => {
+          setShowConfirmModal(false);
+          setRateToDelete(null);
+        }}
+        onConfirm={confirmDeleteRate}
+        title="Eliminar Tarifa"
+        message={`¿Está seguro de eliminar la tarifa de ${rateToDelete?.property_type_name} - ${rateToDelete?.task_type ? TASK_TYPE_LABELS[rateToDelete.task_type] : ''}?`}
+        confirmText="Eliminar"
+        cancelText="Cancelar"
+      />
     </div>
   );
 }
