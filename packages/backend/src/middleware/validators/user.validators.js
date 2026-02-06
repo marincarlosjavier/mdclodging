@@ -29,8 +29,10 @@ export const validateCreateUser = [
     .withMessage('El nombre solo puede contener letras, espacios, guiones y puntos'),
 
   body('role')
-    .isIn(['admin', 'supervisor', 'cleaner'])
-    .withMessage('El rol debe ser: admin, supervisor o cleaner'),
+    .isString()
+    .withMessage('El rol debe ser un texto')
+    .isIn(['admin', 'supervisor', 'housekeeping', 'maintenance'])
+    .withMessage('El rol debe ser: admin, supervisor, housekeeping o maintenance'),
 
   body('phone')
     .optional()

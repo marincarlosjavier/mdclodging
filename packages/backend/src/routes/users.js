@@ -152,7 +152,23 @@ router.put('/:id', requireSupervisor, validateUpdateUser, asyncHandler(async (re
 
   // Prevent self-deactivation
   if (is_active === false && req.user.id === parseInt(id)) {
-    return res.status(400).json({ error: 'Cannot deactivate your own account' });
+    return res.status(400).json({ error: 'No puede desactivar su propia cuenta' });
+  }
+
+  // Prevent deactivation of the first superadministrator
+  if (is_active === false) {
+    const firstAdmin = await pool.query(
+      `SELECT id FROM users
+       WHERE tenant_id = $1 AND 'admin' = ANY(role)
+       ORDER BY id ASC LIMIT 1`,
+      [req.tenantId]
+    );
+
+    if (firstAdmin.rows.length > 0 && firstAdmin.rows[0].id === parseInt(id)) {
+      return res.status(403).json({
+        error: 'No se puede desactivar el superadministrador. Siempre debe haber al menos un superadministrador en la organización.'
+      });
+    }
   }
 
   const result = await pool.query(
@@ -296,7 +312,7 @@ router.delete('/:id', requireAdmin, asyncHandler(async (req, res) => {
 
   if (firstAdmin.rows.length > 0 && firstAdmin.rows[0].id === parseInt(id)) {
     return res.status(403).json({
-      error: 'Cannot delete the superadministrator. There must always be at least one superadministrator for the organization.'
+      error: 'No se puede eliminar el superadministrador. Siempre debe haber al menos un superadministrador en la organización.'
     });
   }
 
@@ -309,7 +325,7 @@ router.delete('/:id', requireAdmin, asyncHandler(async (req, res) => {
   // Log user deletion
   await logUserDeleted(req, parseInt(id), current.rows[0].email);
 
-  res.json({ message: 'User deactivated successfully' });
+  res.json({ message: 'Usuario desactivado correctamente' });
 }));
 
 /**
