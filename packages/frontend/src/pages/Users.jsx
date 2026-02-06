@@ -39,7 +39,15 @@ export default function Users() {
 
   const handleEditClick = (user) => {
     const userRole = Array.isArray(user.role) ? user.role[0] : user.role;
-    setEditingUser(user);
+
+    // Check if this is the superadmin (first admin by ID)
+    const adminUsers = users.filter(u => {
+      const role = Array.isArray(u.role) ? u.role[0] : u.role;
+      return role === 'admin';
+    });
+    const isSuperAdmin = adminUsers.length > 0 && adminUsers.sort((a, b) => a.id - b.id)[0].id === user.id;
+
+    setEditingUser({ ...user, isSuperAdmin });
     setFormData({
       email: user.email,
       password: '',
@@ -277,11 +285,16 @@ export default function Users() {
                   </div>
                 )}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Rol</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Rol {editingUser?.isSuperAdmin && '(Superadministrador - no editable)'}
+                  </label>
                   <select
                     value={formData.role}
                     onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
+                    disabled={editingUser?.isSuperAdmin}
+                    className={`w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none ${
+                      editingUser?.isSuperAdmin ? 'bg-gray-100 cursor-not-allowed' : ''
+                    }`}
                   >
                     <option value="housekeeping">Housekeeping</option>
                     <option value="maintenance">Mantenimiento</option>
@@ -289,6 +302,11 @@ export default function Users() {
                     <option value="supervisor">Supervisor</option>
                     <option value="admin">Administrador</option>
                   </select>
+                  {editingUser?.isSuperAdmin && (
+                    <p className="mt-1 text-xs text-amber-600">
+                      El rol del superadministrador no puede ser modificado
+                    </p>
+                  )}
                 </div>
                 <div className="flex gap-3 pt-4">
                   <button
