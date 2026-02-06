@@ -47,6 +47,26 @@ export default function Reservations() {
     notes: ''
   });
 
+  // Reset form when modal closes
+  const resetForm = () => {
+    setFormData({
+      property_id: '',
+      check_in_date: '',
+      check_out_date: '',
+      checkin_time: '15:00',
+      checkout_time: '12:00',
+      adults: 1,
+      children: 0,
+      infants: 0,
+      has_breakfast: false,
+      status: 'active',
+      reference: '',
+      additional_requirements: '',
+      notes: ''
+    });
+    setEditingReservation(null);
+  };
+
   useEffect(() => {
     dispatch(fetchReservations());
     dispatch(fetchProperties());
@@ -507,17 +527,17 @@ export default function Reservations() {
   const handleEdit = (reservation) => {
     setEditingReservation(reservation);
     setFormData({
-      property_id: reservation.property_id,
+      property_id: reservation.property_id || '',
       reference: reservation.reference || '',
       check_in_date: reservation.check_in_date ? reservation.check_in_date.split('T')[0] : '',
       check_out_date: reservation.check_out_date ? reservation.check_out_date.split('T')[0] : '',
       checkin_time: reservation.checkin_time || '15:00',
       checkout_time: reservation.checkout_time || '12:00',
-      adults: reservation.adults,
-      children: reservation.children,
-      infants: reservation.infants,
-      has_breakfast: reservation.has_breakfast,
-      status: reservation.status,
+      adults: reservation.adults || 1,
+      children: reservation.children || 0,
+      infants: reservation.infants || 0,
+      has_breakfast: reservation.has_breakfast || false,
+      status: reservation.status || 'active',
       additional_requirements: reservation.additional_requirements || '',
       notes: reservation.notes || ''
     });
@@ -576,6 +596,7 @@ export default function Reservations() {
         toast.success(`Reserva creada correctamente. Se generaron ${result.cleaning_tasks_created} tareas de limpieza.`);
       }
       setShowModal(false);
+      resetForm();
       dispatch(fetchReservations());
       fetchCleaningTasks();
     } catch (error) {
@@ -1090,7 +1111,7 @@ export default function Reservations() {
               <h2 className="text-xl font-bold text-gray-900">
                 {editingReservation ? 'Editar Reserva' : 'Nueva Reserva'}
               </h2>
-              <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600">
+              <button onClick={() => { setShowModal(false); resetForm(); }} className="text-gray-400 hover:text-gray-600">
                 <X className="w-6 h-6" />
               </button>
             </div>
@@ -1342,7 +1363,7 @@ export default function Reservations() {
               <div className="flex justify-end space-x-3 pt-4 border-t">
                 <button
                   type="button"
-                  onClick={() => setShowModal(false)}
+                  onClick={() => { setShowModal(false); resetForm(); }}
                   className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
                 >
                   Cancelar

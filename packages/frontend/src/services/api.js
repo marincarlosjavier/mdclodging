@@ -27,17 +27,33 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    const message = error.response?.data?.error || error.message || 'Error de conexión';
-
     // Handle 401 Unauthorized
     if (error.response?.status === 401) {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
       window.location.href = '/login';
       toast.error('Sesión expirada. Por favor inicia sesión nuevamente.');
-    } else {
-      toast.error(message);
+      return Promise.reject(error);
     }
+
+    // Handle validation errors (400) with details
+    if (error.response?.status === 400 && error.response?.data?.details) {
+      const details = error.response.data.details;
+      if (Array.isArray(details) && details.length > 0) {
+        // Show each validation error
+        details.forEach(detail => {
+          toast.error(`${detail.field}: ${detail.message}`);
+        });
+      } else {
+        const message = error.response?.data?.error || 'Error de validación';
+        toast.error(message);
+      }
+      return Promise.reject(error);
+    }
+
+    // Handle other errors
+    const message = error.response?.data?.error || error.message || 'Error de conexión';
+    toast.error(message);
 
     return Promise.reject(error);
   }
