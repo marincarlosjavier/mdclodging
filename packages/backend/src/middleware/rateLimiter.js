@@ -6,7 +6,7 @@ import rateLimit from 'express-rate-limit';
  */
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // 5 attempts per window
+  max: process.env.NODE_ENV === 'development' ? 100 : 5, // More permissive in development
   message: {
     error: 'Demasiados intentos de inicio de sesión. Por favor, intente más tarde.',
     retryAfter: '15 minutos'
