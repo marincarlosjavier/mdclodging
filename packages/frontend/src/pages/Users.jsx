@@ -37,7 +37,10 @@ export default function Users() {
 
   const handleDeleteClick = (user) => {
     // Check if this is the superadministrator (first admin)
-    const adminUsers = users.filter(u => u.role === 'admin' || (Array.isArray(u.role) && u.role.includes('admin')));
+    const adminUsers = users.filter(u => {
+      const role = Array.isArray(u.role) ? u.role[0] : u.role;
+      return role === 'admin';
+    });
     const isSuperAdmin = adminUsers.length > 0 && adminUsers.sort((a, b) => a.id - b.id)[0].id === user.id;
 
     if (isSuperAdmin) {
@@ -144,11 +147,14 @@ export default function Users() {
                     <td className="px-6 py-4 whitespace-nowrap text-gray-600">{user.email}</td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex gap-2">
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${roleColors[user.role]}`}>
-                          {roleLabels[user.role]}
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${roleColors[Array.isArray(user.role) ? user.role[0] : user.role]}`}>
+                          {roleLabels[Array.isArray(user.role) ? user.role[0] : user.role]}
                         </span>
                         {(() => {
-                          const adminUsers = filteredUsers.filter(u => u.role === 'admin' || (Array.isArray(u.role) && u.role.includes('admin')));
+                          const adminUsers = filteredUsers.filter(u => {
+                            const role = Array.isArray(u.role) ? u.role[0] : u.role;
+                            return role === 'admin';
+                          });
                           const isSuperAdmin = adminUsers.length > 0 && adminUsers.sort((a, b) => a.id - b.id)[0].id === user.id;
                           return isSuperAdmin && (
                             <span className="px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
