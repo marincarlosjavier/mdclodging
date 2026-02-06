@@ -31,7 +31,7 @@ export default function SignUp() {
     // Validate password strength
     const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#^()_\-+=\[\]{}|:;,.<>\/~`])[A-Za-z\d@$!%*?&#^()_\-+=\[\]{}|:;,.<>\/~`]{12,}$/;
     if (!passwordRegex.test(formData.adminPassword)) {
-      toast.error('La contraseña debe tener al menos 12 caracteres, incluir mayúsculas, minúsculas, números y caracteres especiales');
+      toast.error('La contraseña debe tener al menos 8 caracteres, incluir mayúsculas, minúsculas, números y caracteres especiales');
       return;
     }
 
@@ -156,7 +156,7 @@ export default function SignUp() {
                   required
                   minLength={12}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition"
-                  placeholder="Mínimo 12 caracteres"
+                  placeholder="Mínimo 8 caracteres"
                 />
                 <p className="mt-1 text-xs text-gray-500">
                   Debe incluir mayúsculas, minúsculas, números y caracteres especiales

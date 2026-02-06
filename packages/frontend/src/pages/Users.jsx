@@ -217,10 +217,10 @@ export default function Users() {
                     required
                     minLength={12}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
-                    placeholder="Mínimo 12 caracteres"
+                    placeholder="Mínimo 8 caracteres"
                   />
                   <p className="mt-1 text-xs text-gray-500">
-                    Debe tener al menos 12 caracteres, incluir mayúsculas, minúsculas, números y caracteres especiales
+                    Debe tener al menos 8 caracteres, incluir mayúsculas, minúsculas, números y caracteres especiales
                   </p>
                 </div>
                 <div>
