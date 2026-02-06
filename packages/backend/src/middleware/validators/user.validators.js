@@ -8,37 +8,37 @@ export const validateCreateUser = [
   body('email')
     .trim()
     .isEmail()
-    .withMessage('Email must be a valid email address')
+    .withMessage('El correo electrónico debe ser válido')
     .normalizeEmail()
     .isLength({ max: 255 })
-    .withMessage('Email must not exceed 255 characters'),
+    .withMessage('El correo no debe exceder 255 caracteres'),
 
   body('password')
     .isLength({ min: 12 })
-    .withMessage('Password must be at least 12 characters long')
+    .withMessage('La contraseña debe tener al menos 12 caracteres')
     .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#^()_\-+=\[\]{}|:;,.<>\/~`])[A-Za-z\d@$!%*?&#^()_\-+=\[\]{}|:;,.<>\/~`]{12,}$/)
-    .withMessage('Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character'),
+    .withMessage('La contraseña debe contener al menos una mayúscula, una minúscula, un número y un carácter especial'),
 
   body('full_name')
     .trim()
     .notEmpty()
-    .withMessage('Full name is required')
+    .withMessage('El nombre completo es requerido')
     .isLength({ min: 2, max: 100 })
-    .withMessage('Full name must be between 2 and 100 characters')
-    .matches(/^[a-zA-Z\s\-\.]+$/)
-    .withMessage('Full name can only contain letters, spaces, hyphens, and periods'),
+    .withMessage('El nombre debe tener entre 2 y 100 caracteres')
+    .matches(/^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s\-\.]+$/)
+    .withMessage('El nombre solo puede contener letras, espacios, guiones y puntos'),
 
   body('role')
     .isIn(['admin', 'supervisor', 'cleaner'])
-    .withMessage('Role must be one of: admin, supervisor, cleaner'),
+    .withMessage('El rol debe ser: admin, supervisor o cleaner'),
 
   body('phone')
     .optional()
     .trim()
     .matches(/^[\d\s\+\-\(\)]+$/)
-    .withMessage('Phone number can only contain digits, spaces, +, -, (, )')
+    .withMessage('El teléfono solo puede contener dígitos, espacios, +, -, (, )')
     .isLength({ max: 20 })
-    .withMessage('Phone number must not exceed 20 characters'),
+    .withMessage('El teléfono no debe exceder 20 caracteres'),
 
   handleValidationErrors
 ];
@@ -49,42 +49,42 @@ export const validateCreateUser = [
 export const validateUpdateUser = [
   param('id')
     .isInt({ min: 1 })
-    .withMessage('User ID must be a positive integer'),
+    .withMessage('El ID de usuario debe ser un número positivo'),
 
   body('email')
     .optional()
     .trim()
     .isEmail()
-    .withMessage('Email must be a valid email address')
+    .withMessage('El correo electrónico debe ser válido')
     .normalizeEmail()
     .isLength({ max: 255 })
-    .withMessage('Email must not exceed 255 characters'),
+    .withMessage('El correo no debe exceder 255 caracteres'),
 
   body('full_name')
     .optional()
     .trim()
     .isLength({ min: 2, max: 100 })
-    .withMessage('Full name must be between 2 and 100 characters')
-    .matches(/^[a-zA-Z\s\-\.]+$/)
-    .withMessage('Full name can only contain letters, spaces, hyphens, and periods'),
+    .withMessage('El nombre debe tener entre 2 y 100 caracteres')
+    .matches(/^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s\-\.]+$/)
+    .withMessage('El nombre solo puede contener letras, espacios, guiones y puntos'),
 
   body('role')
     .optional()
     .isIn(['admin', 'supervisor', 'cleaner'])
-    .withMessage('Role must be one of: admin, supervisor, cleaner'),
+    .withMessage('El rol debe ser: admin, supervisor o cleaner'),
 
   body('phone')
     .optional()
     .trim()
     .matches(/^[\d\s\+\-\(\)]+$/)
-    .withMessage('Phone number can only contain digits, spaces, +, -, (, )')
+    .withMessage('El teléfono solo puede contener dígitos, espacios, +, -, (, )')
     .isLength({ max: 20 })
-    .withMessage('Phone number must not exceed 20 characters'),
+    .withMessage('El teléfono no debe exceder 20 caracteres'),
 
   body('is_active')
     .optional()
     .isBoolean()
-    .withMessage('is_active must be a boolean value'),
+    .withMessage('is_active debe ser un valor booleano'),
 
   handleValidationErrors
 ];
@@ -95,26 +95,26 @@ export const validateUpdateUser = [
 export const validatePasswordChange = [
   body('current_password')
     .notEmpty()
-    .withMessage('Current password is required'),
+    .withMessage('La contraseña actual es requerida'),
 
   body('new_password')
     .isLength({ min: 12 })
-    .withMessage('New password must be at least 12 characters long')
+    .withMessage('La nueva contraseña debe tener al menos 12 caracteres')
     .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#^()_\-+=\[\]{}|:;,.<>\/~`])[A-Za-z\d@$!%*?&#^()_\-+=\[\]{}|:;,.<>\/~`]{12,}$/)
-    .withMessage('Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character')
+    .withMessage('La contraseña debe contener al menos una mayúscula, una minúscula, un número y un carácter especial')
     .custom((value, { req }) => {
       if (value === req.body.current_password) {
-        throw new Error('New password must be different from current password');
+        throw new Error('La nueva contraseña debe ser diferente de la actual');
       }
       return true;
     }),
 
   body('confirm_password')
     .notEmpty()
-    .withMessage('Password confirmation is required')
+    .withMessage('La confirmación de contraseña es requerida')
     .custom((value, { req }) => {
       if (value !== req.body.new_password) {
-        throw new Error('Password confirmation does not match new password');
+        throw new Error('La confirmación de contraseña no coincide');
       }
       return true;
     }),
@@ -128,7 +128,7 @@ export const validatePasswordChange = [
 export const validateUserId = [
   param('id')
     .isInt({ min: 1 })
-    .withMessage('User ID must be a positive integer'),
+    .withMessage('El ID de usuario debe ser un número positivo'),
 
   handleValidationErrors
 ];
