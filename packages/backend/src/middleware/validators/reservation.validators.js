@@ -27,13 +27,13 @@ export const validateCreateReservation = [
 
   body('checkin_time')
     .optional()
-    .matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/)
-    .withMessage('Check-in time must be in HH:MM format'),
+    .matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9])?$/)
+    .withMessage('Check-in time must be in HH:MM or HH:MM:SS format'),
 
   body('checkout_time')
     .optional()
-    .matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/)
-    .withMessage('Check-out time must be in HH:MM format'),
+    .matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9])?$/)
+    .withMessage('Check-out time must be in HH:MM or HH:MM:SS format'),
 
   body('adults')
     .optional()
@@ -116,23 +116,23 @@ export const validateUpdateReservation = [
 
   body('checkin_time')
     .optional()
-    .matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/)
-    .withMessage('Check-in time must be in HH:MM format'),
+    .matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9])?$/)
+    .withMessage('Check-in time must be in HH:MM or HH:MM:SS format'),
 
   body('checkout_time')
     .optional()
-    .matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/)
-    .withMessage('Check-out time must be in HH:MM format'),
+    .matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9])?$/)
+    .withMessage('Check-out time must be in HH:MM or HH:MM:SS format'),
 
   body('actual_checkin_time')
     .optional()
-    .matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/)
-    .withMessage('Actual check-in time must be in HH:MM format'),
+    .matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9])?$/)
+    .withMessage('Actual check-in time must be in HH:MM or HH:MM:SS format'),
 
   body('actual_checkout_time')
     .optional()
-    .matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/)
-    .withMessage('Actual check-out time must be in HH:MM format'),
+    .matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9])?$/)
+    .withMessage('Actual check-out time must be in HH:MM or HH:MM:SS format'),
 
   body('adults')
     .optional()
