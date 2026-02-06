@@ -14,9 +14,9 @@ export const validateCreateUser = [
     .withMessage('El correo no debe exceder 255 caracteres'),
 
   body('password')
-    .isLength({ min: 12 })
-    .withMessage('La contraseña debe tener al menos 12 caracteres')
-    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#^()_\-+=\[\]{}|:;,.<>\/~`])[A-Za-z\d@$!%*?&#^()_\-+=\[\]{}|:;,.<>\/~`]{12,}$/)
+    .isLength({ min: 8 })
+    .withMessage('La contraseña debe tener al menos 8 caracteres')
+    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#^()_\-+=\[\]{}|:;,.<>\/~`])[A-Za-z\d@$!%*?&#^()_\-+=\[\]{}|:;,.<>\/~`]{8,}$/)
     .withMessage('La contraseña debe contener al menos una mayúscula, una minúscula, un número y un carácter especial'),
 
   body('full_name')
@@ -98,9 +98,9 @@ export const validatePasswordChange = [
     .withMessage('La contraseña actual es requerida'),
 
   body('new_password')
-    .isLength({ min: 12 })
-    .withMessage('La nueva contraseña debe tener al menos 12 caracteres')
-    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#^()_\-+=\[\]{}|:;,.<>\/~`])[A-Za-z\d@$!%*?&#^()_\-+=\[\]{}|:;,.<>\/~`]{12,}$/)
+    .isLength({ min: 8 })
+    .withMessage('La nueva contraseña debe tener al menos 8 caracteres')
+    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#^()_\-+=\[\]{}|:;,.<>\/~`])[A-Za-z\d@$!%*?&#^()_\-+=\[\]{}|:;,.<>\/~`]{8,}$/)
     .withMessage('La contraseña debe contener al menos una mayúscula, una minúscula, un número y un carácter especial')
     .custom((value, { req }) => {
       if (value === req.body.current_password) {

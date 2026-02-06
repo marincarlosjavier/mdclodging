@@ -110,10 +110,10 @@ export const validateRegisterTenant = [
     .withMessage('Admin email must not exceed 255 characters'),
 
   body('admin_password')
-    .isLength({ min: 12 })
-    .withMessage('Password must be at least 12 characters long')
-    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#^()_\-+=\[\]{}|:;,.<>\/~`])[A-Za-z\d@$!%*?&#^()_\-+=\[\]{}|:;,.<>\/~`]{12,}$/)
-    .withMessage('Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character'),
+    .isLength({ min: 8 })
+    .withMessage('La contraseña debe tener al menos 8 caracteres')
+    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#^()_\-+=\[\]{}|:;,.<>\/~`])[A-Za-z\d@$!%*?&#^()_\-+=\[\]{}|:;,.<>\/~`]{8,}$/)
+    .withMessage('La contraseña debe contener al menos una mayúscula, una minúscula, un número y un carácter especial'),
 
   handleValidationErrors
 ];
