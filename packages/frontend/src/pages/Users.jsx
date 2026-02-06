@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { fetchUsers, createUser, deleteUser } from '../store/slices/usersSlice';
+import { fetchUsers, createUser, updateUser, deleteUser } from '../store/slices/usersSlice';
 import { Plus, Search, Edit, Trash2 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import ConfirmModal from '../components/ConfirmModal';
@@ -12,6 +12,7 @@ export default function Users() {
   const [showModal, setShowModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [userToDelete, setUserToDelete] = useState(null);
+  const [editingUser, setEditingUser] = useState(null);
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -29,6 +30,38 @@ export default function Users() {
       await dispatch(createUser(formData)).unwrap();
       toast.success('Usuario creado correctamente');
       setShowModal(false);
+      setEditingUser(null);
+      setFormData({ email: '', password: '', full_name: '', role: 'housekeeping' });
+    } catch (error) {
+      // Error already handled
+    }
+  };
+
+  const handleEditClick = (user) => {
+    const userRole = Array.isArray(user.role) ? user.role[0] : user.role;
+    setEditingUser(user);
+    setFormData({
+      email: user.email,
+      password: '',
+      full_name: user.full_name,
+      role: userRole
+    });
+    setShowModal(true);
+  };
+
+  const handleUpdateUser = async (e) => {
+    e.preventDefault();
+    try {
+      const updateData = {
+        email: formData.email,
+        full_name: formData.full_name,
+        role: formData.role
+      };
+
+      await dispatch(updateUser({ id: editingUser.id, data: updateData })).unwrap();
+      toast.success('Usuario actualizado correctamente');
+      setShowModal(false);
+      setEditingUser(null);
       setFormData({ email: '', password: '', full_name: '', role: 'housekeeping' });
     } catch (error) {
       // Error already handled
@@ -172,12 +205,20 @@ export default function Users() {
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
-                      <button
-                        onClick={() => handleDeleteClick(user)}
-                        className="text-red-600 hover:text-red-800 transition"
-                      >
-                        <Trash2 size={18} />
-                      </button>
+                      <div className="flex items-center justify-end gap-3">
+                        <button
+                          onClick={() => handleEditClick(user)}
+                          className="text-blue-600 hover:text-blue-800 transition"
+                        >
+                          <Edit size={18} />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteClick(user)}
+                          className="text-red-600 hover:text-red-800 transition"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -187,13 +228,15 @@ export default function Users() {
         )}
       </div>
 
-      {/* Create User Modal */}
+      {/* Create/Edit User Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
             <div className="p-6">
-              <h2 className="text-2xl font-bold text-gray-900 mb-6">Nuevo Usuario</h2>
-              <form onSubmit={handleCreateUser} className="space-y-4">
+              <h2 className="text-2xl font-bold text-gray-900 mb-6">
+                {editingUser ? 'Editar Usuario' : 'Nuevo Usuario'}
+              </h2>
+              <form onSubmit={editingUser ? handleUpdateUser : handleCreateUser} className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Nombre completo</label>
                   <input
@@ -214,21 +257,25 @@ export default function Users() {
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
                   />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Contraseña</label>
-                  <input
-                    type="password"
-                    value={formData.password}
-                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    required
-                    minLength={8}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
-                    placeholder="Mínimo 8 caracteres"
-                  />
-                  <p className="mt-1 text-xs text-gray-500">
-                    Debe tener al menos 8 caracteres, incluir mayúsculas, minúsculas, números y caracteres especiales
-                  </p>
-                </div>
+                {!editingUser && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Contraseña
+                    </label>
+                    <input
+                      type="password"
+                      value={formData.password}
+                      onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                      required
+                      minLength={8}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
+                      placeholder="Mínimo 8 caracteres"
+                    />
+                    <p className="mt-1 text-xs text-gray-500">
+                      Debe tener al menos 8 caracteres, incluir mayúsculas, minúsculas, números y caracteres especiales
+                    </p>
+                  </div>
+                )}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Rol</label>
                   <select
@@ -246,7 +293,11 @@ export default function Users() {
                 <div className="flex gap-3 pt-4">
                   <button
                     type="button"
-                    onClick={() => setShowModal(false)}
+                    onClick={() => {
+                      setShowModal(false);
+                      setEditingUser(null);
+                      setFormData({ email: '', password: '', full_name: '', role: 'housekeeping' });
+                    }}
                     className="flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition"
                   >
                     Cancelar
@@ -255,7 +306,7 @@ export default function Users() {
                     type="submit"
                     className="flex-1 px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition"
                   >
-                    Crear
+                    {editingUser ? 'Guardar' : 'Crear'}
                   </button>
                 </div>
               </form>
