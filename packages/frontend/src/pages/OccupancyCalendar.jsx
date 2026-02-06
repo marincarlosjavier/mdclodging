@@ -163,8 +163,10 @@ export default function OccupancyCalendar() {
       children: 0,
       infants: 0,
       has_breakfast: false,
+      reference: '',
       additional_requirements: '',
-      notes: ''
+      notes: '',
+      status: 'active'
     });
     setSelectedReservation(null);
     setShowModal(true);
@@ -189,13 +191,19 @@ export default function OccupancyCalendar() {
     return day === 0 || day === 6;
   };
 
+  // Reset modal state
+  const closeModal = () => {
+    setShowModal(false);
+    setSelectedReservation(null);
+    setNewReservation(null);
+  };
+
   // Create new reservation
   const handleCreateReservation = async () => {
     try {
       const result = await dispatch(createReservation(newReservation)).unwrap();
       toast.success(`Reserva creada. Se generaron ${result.cleaning_tasks_created} tareas de limpieza.`);
-      setShowModal(false);
-      setNewReservation(null);
+      closeModal();
       dispatch(fetchReservations());
     } catch (error) {
       // Error already handled
@@ -395,11 +403,7 @@ export default function OccupancyCalendar() {
                 {selectedReservation ? 'Detalles de Reserva' : 'Nueva Reserva'}
               </h2>
               <button
-                onClick={() => {
-                  setShowModal(false);
-                  setSelectedReservation(null);
-                  setNewReservation(null);
-                }}
+                onClick={closeModal}
                 className="text-gray-400 hover:text-gray-600"
               >
                 <X size={24} />
@@ -540,6 +544,18 @@ export default function OccupancyCalendar() {
                     </div>
                   </div>
 
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Referencia</label>
+                    <input
+                      type="text"
+                      name="reference"
+                      value={newReservation.reference}
+                      onChange={handleChange}
+                      placeholder="Nombre del huésped, número de reserva, etc."
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                    />
+                  </div>
+
                   <div className="flex items-center">
                     <input
                       type="checkbox"
@@ -552,12 +568,25 @@ export default function OccupancyCalendar() {
                   </div>
 
                   <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Requerimientos Adicionales</label>
+                    <textarea
+                      name="additional_requirements"
+                      value={newReservation.additional_requirements}
+                      onChange={handleChange}
+                      rows="2"
+                      placeholder="Ej: Cuna para bebé, cama adicional..."
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                    />
+                  </div>
+
+                  <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Notas</label>
                     <textarea
                       name="notes"
                       value={newReservation.notes}
                       onChange={handleChange}
                       rows="2"
+                      placeholder="Notas internas..."
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg"
                     />
                   </div>
@@ -565,10 +594,7 @@ export default function OccupancyCalendar() {
                   <div className="flex gap-3 pt-4">
                     <button
                       type="button"
-                      onClick={() => {
-                        setShowModal(false);
-                        setNewReservation(null);
-                      }}
+                      onClick={closeModal}
                       className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
                     >
                       Cancelar

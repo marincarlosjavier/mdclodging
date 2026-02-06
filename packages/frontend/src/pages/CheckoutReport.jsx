@@ -22,12 +22,27 @@ export default function CheckoutReport() {
     in_progress: true,
     completed: false
   });
+  const [debouncedFilters, setDebouncedFilters] = useState(statusFilters);
   const [showCompleteTaskModal, setShowCompleteTaskModal] = useState(false);
   const [taskToComplete, setTaskToComplete] = useState(null);
   const [timezone, setTimezone] = useState('America/Bogota');
 
+  // Fetch tenant settings once on mount
   useEffect(() => {
     fetchTenantSettings();
+  }, []);
+
+  // Debounce status filters to avoid rapid API calls
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedFilters(statusFilters);
+    }, 300); // 300ms debounce
+
+    return () => clearTimeout(timer);
+  }, [statusFilters]);
+
+  // Fetch report when date or debounced filters change, and set up auto-refresh
+  useEffect(() => {
     fetchReport();
 
     // Auto-refresh every 30 seconds to catch updates from Telegram
@@ -35,8 +50,9 @@ export default function CheckoutReport() {
       fetchReport();
     }, 30000); // 30 seconds
 
+    // Cleanup: clear interval when dependencies change or component unmounts
     return () => clearInterval(refreshInterval);
-  }, [date, statusFilters]);
+  }, [date, debouncedFilters]);
 
   const fetchTenantSettings = async () => {
     try {
@@ -58,21 +74,21 @@ export default function CheckoutReport() {
   }, []);
 
   const fetchReport = async () => {
-    console.log('[fetchReport] Called with filters:', statusFilters);
+    console.log('[fetchReport] Called with filters:', debouncedFilters);
     setLoading(true);
     try {
       // Map frontend filters to backend statuses
       const backendStatuses = [];
-      if (statusFilters.waiting_checkout) {
+      if (debouncedFilters.waiting_checkout) {
         backendStatuses.push('pending'); // Backend: pending without actual_checkout_time
       }
-      if (statusFilters.checked_out) {
+      if (debouncedFilters.checked_out) {
         backendStatuses.push('checked_out'); // Backend: pending with actual_checkout_time
       }
-      if (statusFilters.in_progress) {
+      if (debouncedFilters.in_progress) {
         backendStatuses.push('in_progress');
       }
-      if (statusFilters.completed) {
+      if (debouncedFilters.completed) {
         backendStatuses.push('completed');
       }
 

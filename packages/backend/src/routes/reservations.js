@@ -191,10 +191,10 @@ router.get('/checkout-report', asyncHandler(async (req, res) => {
   // "pending" (Esp. Check out) - show reservations with checkout today but no actual_checkout_time
   if (statusList.includes('pending')) {
     if (taskConditions.length > 0) {
-      // Also include other task conditions
+      // Also include other task conditions (with date filter)
       whereClause += ` AND (
         (r.check_out_date = $${dateFilterParam} AND r.actual_checkout_time IS NULL)
-        OR (ct.id IS NOT NULL AND (${taskConditions.join(' OR ')}))
+        OR (ct.id IS NOT NULL AND (${taskConditions.join(' OR ')}) AND r.check_out_date = $${dateFilterParam})
       )`;
     } else {
       // Only pending
