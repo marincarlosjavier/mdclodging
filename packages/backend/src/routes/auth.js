@@ -165,7 +165,7 @@ router.post('/login', authLimiter, (req, res, next) => {
 router.post('/register-tenant', authLimiter, validateRegisterTenant, asyncHandler(async (req, res) => {
   const {
     tenant_name,
-    subdomain,
+    subdomain: requestedSubdomain,
     tenant_email,
     tenant_phone,
     admin_name,
@@ -177,6 +177,19 @@ router.post('/register-tenant', authLimiter, validateRegisterTenant, asyncHandle
 
   try {
     await client.query('BEGIN');
+
+    // Auto-generate unique subdomain if not provided
+    let subdomain = requestedSubdomain;
+    if (!subdomain) {
+      // Generate from tenant name, fallback to timestamp-based unique ID
+      const baseSubdomain = tenant_name
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, '')
+        .substring(0, 20) || 'tenant';
+
+      // Add unique suffix to ensure uniqueness
+      subdomain = `${baseSubdomain}${Date.now()}`;
+    }
 
     // Check if subdomain exists
     const subdomainCheck = await client.query(

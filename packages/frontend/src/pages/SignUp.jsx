@@ -35,17 +35,10 @@ export default function SignUp() {
       return;
     }
 
-    // Auto-generate subdomain from tenant name
-    const subdomain = formData.tenantName
-      .toLowerCase()
-      .replace(/[^a-z0-9]/g, '')
-      .substring(0, 20) || `tenant${Date.now()}`;
-
     setLoading(true);
     try {
       await dispatch(registerTenant({
         tenant_name: formData.tenantName,
-        subdomain: subdomain,
         tenant_email: formData.adminEmail, // Use admin email as tenant email
         admin_name: formData.adminFullName,
         admin_email: formData.adminEmail,

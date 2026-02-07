@@ -60,9 +60,8 @@ export const validateRegisterTenant = [
     .withMessage('Tenant name can only contain letters, numbers, spaces, hyphens, and periods'),
 
   body('subdomain')
+    .optional({ values: 'falsy' })
     .trim()
-    .notEmpty()
-    .withMessage('Subdomain is required')
     .matches(/^[a-z0-9-]+$/)
     .withMessage('Subdomain can only contain lowercase letters, numbers, and hyphens')
     .isLength({ min: 3, max: 50 })
