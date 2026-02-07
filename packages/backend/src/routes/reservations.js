@@ -569,10 +569,11 @@ router.put('/:id', requireRole('admin', 'supervisor'), validateUpdateReservation
       );
 
       if (taskCheck.rows.length > 0) {
-        // Update existing task
+        // Update existing task - set scheduled_date to today for early checkouts
         await client.query(
           `UPDATE cleaning_tasks
            SET status = 'pending',
+               scheduled_date = CURRENT_DATE,
                checkout_reported_at = NOW(),
                is_priority = $2,
                updated_at = CURRENT_TIMESTAMP
