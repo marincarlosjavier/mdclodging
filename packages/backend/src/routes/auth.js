@@ -207,7 +207,7 @@ router.post('/register-tenant', authLimiter, validateRegisterTenant, asyncHandle
       `INSERT INTO users (tenant_id, email, password_hash, full_name, role, api_token)
        VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING id, email, full_name, role`,
-      [tenantId, admin_email, passwordHash, admin_name, 'admin', apiToken]
+      [tenantId, admin_email, passwordHash, admin_name, ['admin'], apiToken]
     );
 
     // Create default system settings

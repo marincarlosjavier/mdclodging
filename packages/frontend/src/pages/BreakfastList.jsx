@@ -111,7 +111,7 @@ export default function BreakfastList() {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {breakfastList.reservations.length === 0 ? (
+                {!breakfastList.reservations || breakfastList.reservations.length === 0 ? (
                   <tr>
                     <td colSpan="6" className="px-6 py-12 text-center text-gray-500">
                       <Coffee className="w-12 h-12 text-gray-300 mx-auto mb-3" />

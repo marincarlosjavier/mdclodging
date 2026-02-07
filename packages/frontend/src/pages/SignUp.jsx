@@ -29,7 +29,7 @@ export default function SignUp() {
     }
 
     // Validate password strength
-    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#^()_\-+=\[\]{}|:;,.<>\/~`])[A-Za-z\d@$!%*?&#^()_\-+=\[\]{}|:;,.<>\/~`]{12,}$/;
+    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#^()_\-+=\[\]{}|:;,.<>\/~`])[A-Za-z\d@$!%*?&#^()_\-+=\[\]{}|:;,.<>\/~`]{8,}$/;
     if (!passwordRegex.test(formData.adminPassword)) {
       toast.error('La contraseña debe tener al menos 8 caracteres, incluir mayúsculas, minúsculas, números y caracteres especiales');
       return;
@@ -44,15 +44,12 @@ export default function SignUp() {
     setLoading(true);
     try {
       await dispatch(registerTenant({
-        tenant: {
-          name: formData.tenantName,
-          subdomain: subdomain
-        },
-        admin: {
-          email: formData.adminEmail,
-          full_name: formData.adminFullName,
-          password: formData.adminPassword
-        }
+        tenant_name: formData.tenantName,
+        subdomain: subdomain,
+        tenant_email: formData.adminEmail, // Use admin email as tenant email
+        admin_name: formData.adminFullName,
+        admin_email: formData.adminEmail,
+        admin_password: formData.adminPassword
       })).unwrap();
 
       toast.success('¡Empresa registrada exitosamente! Bienvenido');
