@@ -159,6 +159,99 @@ router.post('/login', authLimiter, (req, res, next) => {
 }));
 
 /**
+ * Helper function to detect conflict type and suggest recovery
+ */
+async function detectRegistrationConflict(client, admin_email, subdomain) {
+  // Check if user exists
+  const userCheck = await client.query(
+    `SELECT u.id, u.tenant_id, u.email, u.full_name, u.created_at,
+            t.name as tenant_name, t.subdomain
+     FROM users u
+     JOIN tenants t ON u.tenant_id = t.id
+     WHERE u.email = $1`,
+    [admin_email]
+  );
+
+  // Check if subdomain exists
+  const subdomainCheck = await client.query(
+    `SELECT t.id, t.name, t.subdomain, t.created_at,
+            (SELECT COUNT(*) FROM users WHERE tenant_id = t.id AND 'admin' = ANY(role)) as admin_count,
+            (SELECT COUNT(*) FROM users WHERE tenant_id = t.id) as total_users
+     FROM tenants t
+     WHERE t.subdomain = $1`,
+    [subdomain]
+  );
+
+  const userExists = userCheck.rows.length > 0;
+  const subdomainExists = subdomainCheck.rows.length > 0;
+  const user = userCheck.rows[0];
+  const tenant = subdomainCheck.rows[0];
+
+  // Scenario 1: User exists with complete account
+  if (userExists && user.tenant_id) {
+    return {
+      conflict: true,
+      type: 'account_exists',
+      message: 'Ya tienes una cuenta registrada con este email.',
+      details: {
+        email: admin_email,
+        tenant_name: user.tenant_name,
+        subdomain: user.subdomain,
+        registered_date: user.created_at
+      },
+      suggestions: [
+        { action: 'login', text: '¿Olvidaste tu contraseña? Recupérala aquí', url: '/forgot-password' },
+        { action: 'use_different_email', text: 'Registrar otra empresa con email diferente' }
+      ]
+    };
+  }
+
+  // Scenario 2: Subdomain exists but no admin (orphaned tenant)
+  if (subdomainExists && tenant.admin_count === 0) {
+    return {
+      conflict: true,
+      type: 'incomplete_registration',
+      message: 'Encontramos un registro incompleto. Vamos a completarlo.',
+      details: {
+        tenant_id: tenant.id,
+        tenant_name: tenant.name,
+        can_complete: true
+      },
+      suggestions: [
+        { action: 'complete_registration', text: 'Completar registro automáticamente' }
+      ]
+    };
+  }
+
+  // Scenario 3: Subdomain exists with admin (different user trying same subdomain)
+  if (subdomainExists && tenant.admin_count > 0) {
+    return {
+      conflict: true,
+      type: 'subdomain_taken',
+      message: 'Este subdominio ya está en uso por otra empresa.',
+      details: {
+        subdomain: subdomain,
+        suggested_alternatives: [
+          `${subdomain}2`,
+          `${subdomain}${new Date().getFullYear()}`,
+          `${subdomain}${Math.floor(Math.random() * 1000)}`
+        ]
+      },
+      suggestions: [
+        { action: 'use_different_subdomain', text: 'Usar un subdominio diferente' },
+        { action: 'auto_generate', text: 'Generar subdominio único automáticamente' }
+      ]
+    };
+  }
+
+  // No conflict
+  return {
+    conflict: false,
+    type: 'none'
+  };
+}
+
+/**
  * POST /api/auth/register-tenant
  * Register new tenant with admin user
  */
@@ -170,7 +263,8 @@ router.post('/register-tenant', authLimiter, validateRegisterTenant, asyncHandle
     tenant_phone,
     admin_name,
     admin_email,
-    admin_password
+    admin_password,
+    force_complete // Flag to complete incomplete registration
   } = req.body;
 
   const client = await pool.connect();
@@ -187,23 +281,106 @@ router.post('/register-tenant', authLimiter, validateRegisterTenant, asyncHandle
         .replace(/[^a-z0-9]/g, '')
         .substring(0, 20) || 'tenant';
 
-      // Add unique suffix to ensure uniqueness
-      subdomain = `${baseSubdomain}${Date.now()}`;
+      // Add unique suffix to ensure uniqueness (using more entropy)
+      const uniqueSuffix = `${Date.now()}${Math.floor(Math.random() * 1000)}`;
+      subdomain = `${baseSubdomain}${uniqueSuffix}`;
     }
 
-    // Check if subdomain exists
-    const subdomainCheck = await client.query(
-      'SELECT id FROM tenants WHERE subdomain = $1',
-      [subdomain]
-    );
+    // Detect conflicts before proceeding
+    const conflictCheck = await detectRegistrationConflict(client, admin_email, subdomain);
 
-    if (subdomainCheck.rows.length > 0) {
+    if (conflictCheck.conflict) {
       await client.query('ROLLBACK');
+
+      // Special case: Incomplete registration that can be completed
+      if (conflictCheck.type === 'incomplete_registration' && force_complete) {
+        // Allow to proceed and complete the registration
+        const tenantId = conflictCheck.details.tenant_id;
+
+        // Hash password
+        const passwordHash = await bcrypt.hash(admin_password, 10);
+        const apiToken = uuidv4();
+
+        await client.query('BEGIN');
+
+        // Create admin user
+        const userResult = await client.query(
+          `INSERT INTO users (tenant_id, email, password_hash, full_name, role, api_token)
+           VALUES ($1, $2, $3, $4, $5, $6)
+           RETURNING id, email, full_name, role`,
+          [tenantId, admin_email, passwordHash, admin_name, ['admin'], apiToken]
+        );
+
+        // Create default system settings if missing
+        const settingsCheck = await client.query(
+          'SELECT COUNT(*) FROM system_settings WHERE tenant_id = $1',
+          [tenantId]
+        );
+
+        if (parseInt(settingsCheck.rows[0].count) === 0) {
+          const defaultSettings = [
+            { key: 'telegram_bot_enabled', value: 'false', type: 'boolean' },
+            { key: 'telegram_bot_token', value: '', type: 'string' },
+            { key: 'notification_enabled', value: 'true', type: 'boolean' }
+          ];
+
+          for (const setting of defaultSettings) {
+            await client.query(
+              `INSERT INTO system_settings (tenant_id, setting_key, setting_value, setting_type)
+               VALUES ($1, $2, $3, $4)`,
+              [tenantId, setting.key, setting.value, setting.type]
+            );
+          }
+        }
+
+        await client.query('COMMIT');
+
+        // Generate JWT token
+        const jti = uuidv4();
+        const token = jwt.sign(
+          {
+            userId: userResult.rows[0].id,
+            email: admin_email,
+            role: 'admin',
+            tenantId: tenantId,
+            jti
+          },
+          process.env.JWT_SECRET,
+          { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+        );
+
+        setAuthCookie(res, token);
+
+        return res.status(201).json({
+          message: 'Registro completado exitosamente',
+          completed_incomplete_registration: true,
+          token,
+          tenant: {
+            id: tenantId,
+            name: conflictCheck.details.tenant_name,
+            subdomain: subdomain
+          },
+          user: {
+            id: userResult.rows[0].id,
+            email: userResult.rows[0].email,
+            full_name: userResult.rows[0].full_name,
+            role: userResult.rows[0].role,
+            api_token: apiToken
+          }
+        });
+      }
+
+      // Return detailed conflict information
       return res.status(409).json({
-        error: 'Subdomain already taken. Please choose a different subdomain.',
-        field: 'subdomain'
+        error: conflictCheck.message,
+        conflict_type: conflictCheck.type,
+        details: conflictCheck.details,
+        suggestions: conflictCheck.suggestions
       });
     }
+
+    // No conflicts, proceed with normal registration
+    // (Subdomain might have been regenerated if there was a collision)
 
     // Create tenant
     const tenantResult = await client.query(
