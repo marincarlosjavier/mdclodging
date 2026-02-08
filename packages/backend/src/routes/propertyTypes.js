@@ -29,14 +29,8 @@ router.get('/', asyncHandler(async (req, res) => {
       (SELECT COALESCE(SUM(sofa_beds), 0) FROM property_type_rooms WHERE property_type_id = pt.id) as total_sofa_beds,
       (SELECT COUNT(*) FROM property_type_rooms WHERE property_type_id = pt.id AND has_bathroom = true) as total_bathrooms,
       (SELECT STRING_AGG(DISTINCT space_type, ', ')
-       FROM property_type_spaces WHERE property_type_id = pt.id) as space_types,
-      dept.name as department,
-      city.name as city,
-      zone.name as zone
+       FROM property_type_spaces WHERE property_type_id = pt.id) as space_types
     FROM property_types pt
-    LEFT JOIN catalog_items dept ON pt.department_id = dept.id
-    LEFT JOIN catalog_items city ON pt.city_id = city.id
-    LEFT JOIN catalog_items zone ON pt.zone_id = zone.id
     WHERE pt.tenant_id = $1
   `;
   const params = [req.tenantId];
@@ -69,14 +63,8 @@ router.get('/:id', asyncHandler(async (req, res) => {
 
   const [typeResult, roomsResult, spacesResult] = await Promise.all([
     pool.query(
-      `SELECT pt.*,
-        dept.name as department_name,
-        city.name as city_name,
-        zone.name as zone_name
+      `SELECT pt.*
        FROM property_types pt
-       LEFT JOIN catalog_items dept ON pt.department_id = dept.id
-       LEFT JOIN catalog_items city ON pt.city_id = city.id
-       LEFT JOIN catalog_items zone ON pt.zone_id = zone.id
        WHERE pt.id = $1 AND pt.tenant_id = $2`,
       [id, req.tenantId]
     ),
@@ -125,21 +113,18 @@ router.post('/', requireAdmin, asyncHandler(async (req, res) => {
     name,
     description,
     property_category,
-    department_id,
-    city_id,
-    zone_id,
-    room_count,
-    room_nomenclature_type,
-    room_nomenclature_prefix,
-    room_nomenclature_start,
-    room_nomenclature_examples,
+    max_capacity,
     rooms,
     spaces
   } = req.body;
 
   // Validation
-  if (!name || !property_category) {
-    return res.status(400).json({ error: 'Name and property category are required' });
+  if (!name || !property_category || !max_capacity) {
+    return res.status(400).json({ error: 'Name, property category, and max capacity are required' });
+  }
+
+  if (max_capacity < 1) {
+    return res.status(400).json({ error: 'Max capacity must be at least 1' });
   }
 
   const client = await pool.connect();
@@ -149,24 +134,14 @@ router.post('/', requireAdmin, asyncHandler(async (req, res) => {
     // Insert property type
     const typeResult = await client.query(
       `INSERT INTO property_types (
-        tenant_id, name, description, property_category,
-        department_id, city_id, zone_id,
-        room_count, room_nomenclature_type, room_nomenclature_prefix,
-        room_nomenclature_start, room_nomenclature_examples
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
+        tenant_id, name, description, property_category, max_capacity
+      ) VALUES ($1, $2, $3, $4, $5) RETURNING *`,
       [
         req.tenantId,
         name,
         description,
         property_category,
-        department_id || null,
-        city_id || null,
-        zone_id || null,
-        room_count || 1,
-        room_nomenclature_type || 'numeric',
-        room_nomenclature_prefix || '',
-        room_nomenclature_start || 101,
-        room_nomenclature_examples || null
+        max_capacity
       ]
     );
     const propertyTypeId = typeResult.rows[0].id;
@@ -285,14 +260,7 @@ router.put('/:id', requireAdmin, asyncHandler(async (req, res) => {
     description,
     property_category,
     is_active,
-    department_id,
-    city_id,
-    zone_id,
-    room_count,
-    room_nomenclature_type,
-    room_nomenclature_prefix,
-    room_nomenclature_start,
-    room_nomenclature_examples,
+    max_capacity,
     rooms,
     spaces
   } = req.body;
@@ -316,28 +284,15 @@ router.put('/:id', requireAdmin, asyncHandler(async (req, res) => {
     await client.query(
       `UPDATE property_types
        SET name = $1, description = $2, property_category = $3,
-           is_active = $4,
-           department_id = $5, city_id = $6, zone_id = $7,
-           room_count = $8,
-           room_nomenclature_type = $9,
-           room_nomenclature_prefix = $10,
-           room_nomenclature_start = $11,
-           room_nomenclature_examples = $12,
+           is_active = $4, max_capacity = $5,
            updated_at = CURRENT_TIMESTAMP
-       WHERE id = $13`,
+       WHERE id = $6`,
       [
         name,
         description,
         property_category,
         is_active !== undefined ? is_active : true,
-        department_id || null,
-        city_id || null,
-        zone_id || null,
-        room_count || 1,
-        room_nomenclature_type || 'numeric',
-        room_nomenclature_prefix || '',
-        room_nomenclature_start || 101,
-        room_nomenclature_examples || null,
+        max_capacity,
         id
       ]
     );
@@ -463,100 +418,6 @@ router.delete('/:id', requireAdmin, asyncHandler(async (req, res) => {
   }
 
   res.json({ message: 'Property type deleted successfully' });
-}));
-
-/**
- * POST /api/property-types/:id/generate-properties
- * Generate individual properties based on nomenclature settings
- */
-router.post('/:id/generate-properties', requireAdmin, asyncHandler(async (req, res) => {
-  const { id } = req.params;
-
-  // Get property type with nomenclature settings
-  const typeResult = await pool.query(
-    `SELECT * FROM property_types
-     WHERE id = $1 AND tenant_id = $2`,
-    [id, req.tenantId]
-  );
-
-  if (typeResult.rows.length === 0) {
-    return res.status(404).json({ error: 'Property type not found' });
-  }
-
-  const propertyType = typeResult.rows[0];
-  const {
-    room_count,
-    room_nomenclature_type,
-    room_nomenclature_prefix,
-    room_nomenclature_start,
-    room_nomenclature_examples
-  } = propertyType;
-
-  // Generate property names based on nomenclature
-  const propertyNames = [];
-
-  if (room_nomenclature_type === 'numeric') {
-    const prefix = room_nomenclature_prefix || '';
-    const start = room_nomenclature_start || 101;
-    for (let i = 0; i < room_count; i++) {
-      propertyNames.push(`${prefix}${start + i}`);
-    }
-  } else if (room_nomenclature_type === 'alphabetic') {
-    const prefix = room_nomenclature_prefix || '';
-    const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-    for (let i = 0; i < room_count && i < 26; i++) {
-      propertyNames.push(`${prefix}${letters[i]}`);
-    }
-  } else if (room_nomenclature_type === 'custom') {
-    // Parse custom nomenclature examples
-    if (room_nomenclature_examples) {
-      const names = room_nomenclature_examples.split(',').map(n => n.trim()).filter(n => n);
-      propertyNames.push(...names);
-    }
-  }
-
-  if (propertyNames.length === 0) {
-    return res.status(400).json({ error: 'No property names could be generated' });
-  }
-
-  // Insert properties in batch
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-
-    const createdProperties = [];
-    for (const name of propertyNames) {
-      // Check if property with this name already exists
-      const existing = await client.query(
-        'SELECT id FROM properties WHERE tenant_id = $1 AND name = $2',
-        [req.tenantId, name]
-      );
-
-      if (existing.rows.length === 0) {
-        const result = await client.query(
-          `INSERT INTO properties (tenant_id, property_type_id, name, status)
-           VALUES ($1, $2, $3, 'available')
-           RETURNING *`,
-          [req.tenantId, id, name]
-        );
-        createdProperties.push(result.rows[0]);
-      }
-    }
-
-    await client.query('COMMIT');
-
-    res.status(201).json({
-      message: `Successfully generated ${createdProperties.length} properties`,
-      created: createdProperties.length,
-      skipped: propertyNames.length - createdProperties.length,
-      properties: createdProperties
-    });
-  } catch (error) {
-    await client.query('ROLLBACK');
-    throw error;
-  } finally {
-    client.release();
-  }
 }));
 
 export default router;

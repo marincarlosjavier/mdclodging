@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useDispatch } from 'react-redux';
 import { createPropertyType, updatePropertyType, fetchPropertyTypeById } from '../../store/slices/propertyTypesSlice';
-import { fetchCatalogItems, createCatalogItem } from '../../store/slices/catalogSlice';
 import { X, Plus, Trash2, ChevronRight, ChevronLeft, Bed, Home } from 'lucide-react';
 import { toast } from 'react-toastify';
 
@@ -9,111 +8,17 @@ export default function PropertyTypeModal({ type, onClose }) {
   const dispatch = useDispatch();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
-  const [catalogItems, setCatalogItems] = useState({
-    departments: [],
-    allCities: [],  // All cities, unfiltered
-    allZones: []    // All zones, unfiltered
-  });
-  const [showQuickCreate, setShowQuickCreate] = useState(null); // 'department', 'city', 'zone', or null
-  const [quickCreateData, setQuickCreateData] = useState({ name: '', description: '' });
 
   const [formData, setFormData] = useState({
     name: '',
     description: '',
     property_category: 'apartment',
-    department_id: '',
-    city_id: '',
-    zone_id: '',
+    max_capacity: 1,
     rooms: [],
     spaces: []
   });
 
-  // Load catalog items on mount
-  useEffect(() => {
-    const loadCatalogItems = async () => {
-      try {
-        const [departmentsRes, citiesRes, zonesRes] = await Promise.all([
-          dispatch(fetchCatalogItems({ category: 'location', type: 'department' })).unwrap(),
-          dispatch(fetchCatalogItems({ category: 'location', type: 'city' })).unwrap(),
-          dispatch(fetchCatalogItems({ category: 'location', type: 'zone' })).unwrap()
-        ]);
 
-        setCatalogItems({
-          departments: departmentsRes,
-          allCities: citiesRes,
-          allZones: zonesRes
-        });
-      } catch (error) {
-        console.error('Error loading catalog items:', error);
-      }
-    };
-
-    loadCatalogItems();
-  }, [dispatch]);
-
-  // Filtered lists based on parent selection
-  const filteredCities = formData.department_id
-    ? catalogItems.allCities.filter(city => city.parent_id === parseInt(formData.department_id))
-    : [];
-
-  const filteredZones = formData.city_id
-    ? catalogItems.allZones.filter(zone => zone.parent_id === parseInt(formData.city_id))
-    : [];
-
-  // Handle quick create of catalog items
-  const handleQuickCreate = async () => {
-    if (!quickCreateData.name.trim()) {
-      toast.error('El nombre es requerido');
-      return;
-    }
-
-    try {
-      let parent_id = null;
-      if (showQuickCreate === 'city' && formData.department_id) {
-        parent_id = parseInt(formData.department_id);
-      } else if (showQuickCreate === 'zone' && formData.city_id) {
-        parent_id = parseInt(formData.city_id);
-      }
-
-      const newItem = await dispatch(createCatalogItem({
-        category: 'location',
-        type: showQuickCreate,
-        name: quickCreateData.name,
-        description: quickCreateData.description,
-        parent_id
-      })).unwrap();
-
-      toast.success(`${showQuickCreate === 'department' ? 'Departamento' : showQuickCreate === 'city' ? 'Ciudad' : 'Zona'} creado correctamente`);
-
-      // Reload catalog items
-      const [departmentsRes, citiesRes, zonesRes] = await Promise.all([
-        dispatch(fetchCatalogItems({ category: 'location', type: 'department' })).unwrap(),
-        dispatch(fetchCatalogItems({ category: 'location', type: 'city' })).unwrap(),
-        dispatch(fetchCatalogItems({ category: 'location', type: 'zone' })).unwrap()
-      ]);
-
-      setCatalogItems({
-        departments: departmentsRes,
-        allCities: citiesRes,
-        allZones: zonesRes
-      });
-
-      // Auto-select the newly created item
-      if (showQuickCreate === 'department') {
-        setFormData(prev => ({ ...prev, department_id: newItem.item.id }));
-      } else if (showQuickCreate === 'city') {
-        setFormData(prev => ({ ...prev, city_id: newItem.item.id }));
-      } else if (showQuickCreate === 'zone') {
-        setFormData(prev => ({ ...prev, zone_id: newItem.item.id }));
-      }
-
-      // Close quick create modal
-      setShowQuickCreate(null);
-      setQuickCreateData({ name: '', description: '' });
-    } catch (error) {
-      // Error already handled by interceptor
-    }
-  };
 
   useEffect(() => {
     if (type?.id) {
@@ -125,9 +30,7 @@ export default function PropertyTypeModal({ type, onClose }) {
             name: data.name || '',
             description: data.description || '',
             property_category: data.property_category || 'apartment',
-            department_id: data.department_id || '',
-            city_id: data.city_id || '',
-            zone_id: data.zone_id || '',
+            max_capacity: data.max_capacity || 1,
             rooms: data.rooms || [],
             spaces: data.spaces || []
           });
@@ -137,26 +40,24 @@ export default function PropertyTypeModal({ type, onClose }) {
     }
   }, [type, dispatch]);
 
+  // Auto-generate name when rooms or category changes
+  useEffect(() => {
+    if (formData.rooms.length > 0 || formData.property_category) {
+      const autoName = generateAutoName();
+      if (autoName) {
+        setFormData(prev => ({ ...prev, name: autoName }));
+      }
+    }
+  }, [formData.rooms, formData.property_category]);
+
   const handleChange = (e) => {
     const { name, value, type } = e.target;
     const newValue = type === 'number' ? parseInt(value) || 0 : value;
 
-    setFormData(prev => {
-      const updated = {
-        ...prev,
-        [name]: newValue
-      };
-
-      // Clear child selections when parent changes
-      if (name === 'department_id') {
-        updated.city_id = '';
-        updated.zone_id = '';
-      } else if (name === 'city_id') {
-        updated.zone_id = '';
-      }
-
-      return updated;
-    });
+    setFormData(prev => ({
+      ...prev,
+      [name]: newValue
+    }));
   };
 
   const handleAddRoom = () => {
@@ -273,29 +174,84 @@ export default function PropertyTypeModal({ type, onClose }) {
     }));
   };
 
-  // Generate nomenclature examples based on type
-  const generateNomenclatureExamples = () => {
-    const type = formData.room_nomenclature_type || 'numeric';
-    const prefix = formData.room_nomenclature_prefix || '';
-    const start = formData.room_nomenclature_start || 101;
-    const count = Math.min(formData.room_count || 3, 3); // Show max 3 examples
+  // Validation for step 2 (rooms)
+  const validateStep2 = () => {
+    if (formData.rooms.length === 0) {
+      toast.error('Debes agregar al menos una habitación');
+      return false;
+    }
+    const hasAtLeastOneBed = formData.rooms.some(room =>
+      room.beds && room.beds.length > 0
+    );
+    if (!hasAtLeastOneBed) {
+      toast.error('Debes seleccionar al menos un tipo de cama');
+      return false;
+    }
+    return true;
+  };
 
-    if (type === 'numeric') {
-      const examples = [];
-      for (let i = 0; i < count; i++) {
-        examples.push(`${prefix}${start + i}`);
-      }
-      return examples.join(', ') + (formData.room_count > 3 ? '...' : '');
-    } else if (type === 'alphabetic') {
-      const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-      const examples = [];
-      for (let i = 0; i < count && i < 26; i++) {
-        examples.push(`${prefix}${letters[i]}`);
-      }
-      return examples.join(', ') + (formData.room_count > 3 ? '...' : '');
+  // Helper functions for auto-generating names
+  const getCategoryLabel = (category) => {
+    const labels = {
+      hotel_room: 'Habitación Hotel',
+      apartment: 'Apartamento',
+      house: 'Casa',
+      suite: 'Suite',
+      other: 'Otro'
+    };
+    return labels[category] || category;
+  };
+
+  const getBedTypeLabel = (bedType) => {
+    const labels = {
+      single: 'cama sencilla',
+      double: 'cama doble',
+      queen: 'cama queen',
+      king: 'cama king',
+      sofa_bed: 'sofa cama'
+    };
+    return labels[bedType] || bedType;
+  };
+
+  const pluralizeBed = (quantity, bedType) => {
+    const label = getBedTypeLabel(bedType);
+    if (quantity === 1) return `${quantity} ${label}`;
+    return `${quantity} ${label.replace('cama', 'camas')}`;
+  };
+
+  const generateAutoName = () => {
+    if (!formData.property_category || formData.rooms.length === 0) return '';
+
+    const category = getCategoryLabel(formData.property_category);
+
+    const roomDescriptions = formData.rooms
+      .filter(room => room.beds && room.beds.length > 0)
+      .map(room => {
+        const bedList = room.beds
+          .map(bed => pluralizeBed(bed.quantity, bed.type))
+          .join('-');
+        return `1 habitacion/${bedList}`;
+      });
+
+    const allBeds = {};
+    formData.rooms.forEach(room => {
+      (room.beds || []).forEach(bed => {
+        allBeds[bed.type] = (allBeds[bed.type] || 0) + bed.quantity;
+      });
+    });
+
+    const bedSummary = Object.entries(allBeds)
+      .map(([type, quantity]) => pluralizeBed(quantity, type))
+      .join('-');
+
+    let finalName = `${category} ${roomDescriptions.join(', ')}-${bedSummary}`;
+
+    // Truncate if exceeds 250 characters
+    if (finalName.length > 250) {
+      finalName = finalName.substring(0, 247) + '...';
     }
 
-    return 'N/A';
+    return finalName;
   };
 
   // Convert beds array to individual fields for backend compatibility
@@ -427,9 +383,13 @@ export default function PropertyTypeModal({ type, onClose }) {
                           value={formData.name}
                           onChange={handleChange}
                           required
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
-                          placeholder="Ej: Apartamento Estándar"
+                          disabled
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none bg-gray-50 text-gray-600 cursor-not-allowed"
+                          placeholder="Se generará automáticamente"
                         />
+                        <p className="text-xs text-gray-500 mt-1">
+                          Se genera automáticamente según la categoría y habitaciones
+                        </p>
                       </div>
 
                       <div>
@@ -465,127 +425,24 @@ export default function PropertyTypeModal({ type, onClose }) {
                         placeholder="Descripción breve..."
                       />
                     </div>
-                  </div>
-                </div>
-
-                {/* Ubicación */}
-                <div className="border-t pt-6">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Ubicación</h3>
-                  <p className="text-sm text-gray-600 mb-4">
-                    Selecciona desde el catálogo o crea uno nuevo con el botón +
-                  </p>
-
-                  <div className="grid grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Departamento
-                      </label>
-                      <div className="flex gap-2">
-                        <select
-                          name="department_id"
-                          value={formData.department_id}
-                          onChange={handleChange}
-                          className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
-                        >
-                          <option value="">Seleccionar...</option>
-                          {catalogItems.departments.map((item) => (
-                            <option key={item.id} value={item.id}>
-                              {item.name}
-                            </option>
-                          ))}
-                        </select>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setShowQuickCreate('department');
-                            setQuickCreateData({ name: '', description: '' });
-                          }}
-                          className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
-                          title="Crear nuevo departamento"
-                        >
-                          <Plus size={20} />
-                        </button>
-                      </div>
-                    </div>
 
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Ciudad
+                        Cantidad de Personas (Adultos) *
                       </label>
-                      <div className="flex gap-2">
-                        <select
-                          name="city_id"
-                          value={formData.city_id}
-                          onChange={handleChange}
-                          disabled={!formData.department_id}
-                          className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none disabled:bg-gray-100 disabled:cursor-not-allowed"
-                        >
-                          <option value="">
-                            {formData.department_id ? 'Seleccionar...' : 'Primero selecciona un departamento'}
-                          </option>
-                          {filteredCities.map((item) => (
-                            <option key={item.id} value={item.id}>
-                              {item.name}
-                            </option>
-                          ))}
-                        </select>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (!formData.department_id) {
-                              toast.warning('Primero selecciona un departamento');
-                              return;
-                            }
-                            setShowQuickCreate('city');
-                            setQuickCreateData({ name: '', description: '' });
-                          }}
-                          disabled={!formData.department_id}
-                          className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition disabled:bg-gray-300 disabled:cursor-not-allowed"
-                          title="Crear nueva ciudad"
-                        >
-                          <Plus size={20} />
-                        </button>
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Edificio/Zona
-                      </label>
-                      <div className="flex gap-2">
-                        <select
-                          name="zone_id"
-                          value={formData.zone_id}
-                          onChange={handleChange}
-                          disabled={!formData.city_id}
-                          className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none disabled:bg-gray-100 disabled:cursor-not-allowed"
-                        >
-                          <option value="">
-                            {formData.city_id ? 'Seleccionar...' : 'Primero selecciona una ciudad'}
-                          </option>
-                          {filteredZones.map((item) => (
-                            <option key={item.id} value={item.id}>
-                              {item.name}
-                            </option>
-                          ))}
-                        </select>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (!formData.city_id) {
-                              toast.warning('Primero selecciona una ciudad');
-                              return;
-                            }
-                            setShowQuickCreate('zone');
-                            setQuickCreateData({ name: '', description: '' });
-                          }}
-                          disabled={!formData.city_id}
-                          className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition disabled:bg-gray-300 disabled:cursor-not-allowed"
-                          title="Crear nueva zona"
-                        >
-                          <Plus size={20} />
-                        </button>
-                      </div>
+                      <input
+                        type="number"
+                        name="max_capacity"
+                        value={formData.max_capacity}
+                        onChange={handleChange}
+                        min="1"
+                        required
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
+                        placeholder="Ej: 4"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        Capacidad máxima de adultos (sin incluir niños o infantes)
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -602,15 +459,6 @@ export default function PropertyTypeModal({ type, onClose }) {
                     Configura las habitaciones/dormitorios que tiene este tipo de propiedad
                   </p>
                 </div>
-
-                <button
-                  type="button"
-                  onClick={handleAddRoom}
-                  className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition"
-                >
-                  <Plus size={16} />
-                  Agregar Habitación
-                </button>
 
                 {formData.rooms.length === 0 ? (
                   <div className="text-center py-12 text-gray-500 border-2 border-dashed border-gray-300 rounded-lg">
@@ -721,6 +569,15 @@ export default function PropertyTypeModal({ type, onClose }) {
                     ))}
                   </div>
                 )}
+
+                <button
+                  type="button"
+                  onClick={handleAddRoom}
+                  className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition"
+                >
+                  <Plus size={16} />
+                  Agregar Habitación
+                </button>
               </div>
             )}
 
@@ -733,15 +590,6 @@ export default function PropertyTypeModal({ type, onClose }) {
                     Configura las áreas comunes como cocina, sala, comedor, baños, patio, etc.
                   </p>
                 </div>
-
-                <button
-                  type="button"
-                  onClick={handleAddSpace}
-                  className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition"
-                >
-                  <Plus size={16} />
-                  Agregar Área
-                </button>
 
                 {formData.spaces.length === 0 ? (
                   <div className="text-center py-12 text-gray-500 border-2 border-dashed border-gray-300 rounded-lg">
@@ -902,6 +750,15 @@ export default function PropertyTypeModal({ type, onClose }) {
                     ))}
                   </div>
                 )}
+
+                <button
+                  type="button"
+                  onClick={handleAddSpace}
+                  className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition"
+                >
+                  <Plus size={16} />
+                  Agregar Área
+                </button>
               </div>
             )}
 
@@ -923,16 +780,8 @@ export default function PropertyTypeModal({ type, onClose }) {
                         <dd className="text-gray-900">{formData.property_category}</dd>
                       </div>
                       <div className="flex">
-                        <dt className="font-medium text-gray-700 w-32">Unidades:</dt>
-                        <dd className="text-gray-900">{formData.room_count}</dd>
-                      </div>
-                      <div className="flex">
-                        <dt className="font-medium text-gray-700 w-32">Nomenclatura:</dt>
-                        <dd className="text-gray-900">
-                          {formData.room_nomenclature_type === 'custom'
-                            ? formData.room_nomenclature_examples
-                            : generateNomenclatureExamples()}
-                        </dd>
+                        <dt className="font-medium text-gray-700 w-32">Capacidad:</dt>
+                        <dd className="text-gray-900">{formData.max_capacity} personas (adultos)</dd>
                       </div>
                       {formData.description && (
                         <div className="flex">
@@ -1011,7 +860,10 @@ export default function PropertyTypeModal({ type, onClose }) {
             {step < 4 ? (
               <button
                 type="button"
-                onClick={() => setStep(step + 1)}
+                onClick={() => {
+                  if (step === 2 && !validateStep2()) return;
+                  setStep(step + 1);
+                }}
                 className="flex items-center gap-2 px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition"
               >
                 Siguiente
@@ -1030,77 +882,6 @@ export default function PropertyTypeModal({ type, onClose }) {
         </div>
       </div>
 
-      {/* Quick Create Location Modal */}
-      {showQuickCreate && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60]">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 m-4">
-            <h3 className="text-lg font-bold text-gray-900 mb-4">
-              Crear {showQuickCreate === 'department' ? 'Departamento' : showQuickCreate === 'city' ? 'Ciudad' : 'Zona'}
-            </h3>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Nombre *
-                </label>
-                <input
-                  type="text"
-                  value={quickCreateData.name}
-                  onChange={(e) => setQuickCreateData({ ...quickCreateData, name: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
-                  placeholder={`Nombre del ${showQuickCreate === 'department' ? 'departamento' : showQuickCreate === 'city' ? 'ciudad' : 'zona'}`}
-                  autoFocus
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Descripción
-                </label>
-                <textarea
-                  value={quickCreateData.description}
-                  onChange={(e) => setQuickCreateData({ ...quickCreateData, description: e.target.value })}
-                  rows={3}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
-                  placeholder="Descripción opcional..."
-                />
-              </div>
-
-              {showQuickCreate === 'city' && formData.department_id && (
-                <div className="text-sm text-gray-600 bg-blue-50 p-3 rounded">
-                  Se creará en: <strong>{catalogItems.departments.find(d => d.id === parseInt(formData.department_id))?.name}</strong>
-                </div>
-              )}
-
-              {showQuickCreate === 'zone' && formData.city_id && (
-                <div className="text-sm text-gray-600 bg-blue-50 p-3 rounded">
-                  Se creará en: <strong>{catalogItems.allCities.find(c => c.id === parseInt(formData.city_id))?.name}</strong>
-                </div>
-              )}
-            </div>
-
-            <div className="flex gap-2 mt-6">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowQuickCreate(null);
-                  setQuickCreateData({ name: '', description: '' });
-                }}
-                className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={handleQuickCreate}
-                className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
-              >
-                Crear
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

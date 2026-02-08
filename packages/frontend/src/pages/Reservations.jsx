@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchReservations, createReservation, updateReservation, deleteReservation } from '../store/slices/reservationsSlice';
 import { fetchProperties } from '../store/slices/propertiesSlice';
-import { Plus, Calendar, Users, Coffee, Edit, Trash2, X, ArrowUpDown, LogIn, LogOut, Clock, XCircle, Home, Bed, DoorClosed, Sparkles, CheckCircle, Timer, AlertCircle, Loader } from 'lucide-react';
+import { Plus, Calendar, Users, Coffee, Edit, Trash2, X, ArrowUpDown, LogIn, LogOut, Clock, XCircle, Home, Bed, DoorClosed, Sparkles, CheckCircle, Timer, AlertCircle, Loader, RefreshCw } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { getTodayInColombia } from '../utils/timezone';
 import api from '../services/api';
@@ -28,6 +28,11 @@ export default function Reservations() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [reservationToDelete, setReservationToDelete] = useState(null);
   const [activeFilter, setActiveFilter] = useState(null); // 'checkins', 'checkouts', 'stayovers', 'available', 'breakfast', 'housekeeping', 'totalguests', null = all
+  const [showStatusModal, setShowStatusModal] = useState(false);
+  const [statusChangeReservation, setStatusChangeReservation] = useState(null);
+  const [newStatus, setNewStatus] = useState('');
+  const [showStatusConfirmFromEdit, setShowStatusConfirmFromEdit] = useState(false);
+  const [pendingFormData, setPendingFormData] = useState(null);
   const [cleaningTasks, setCleaningTasks] = useState([]);
   const [housekeepingReport, setHousekeepingReport] = useState([]);
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -426,6 +431,78 @@ export default function Reservations() {
     setShowCheckoutModal(true);
   };
 
+  // Status change handlers
+  const handleStatusChange = (reservation) => {
+    setStatusChangeReservation(reservation);
+    setNewStatus('');
+    setShowStatusModal(true);
+  };
+
+  const isValidStatusTransition = (currentStatus, targetStatus) => {
+    const validTransitions = {
+      'active': ['checked_in', 'cancelled', 'no_show'],
+      'checked_in': ['checked_out', 'cancelled', 'active'],
+      'checked_out': ['active', 'checked_in'],
+      'cancelled': ['active'],
+      'no_show': ['active']
+    };
+    return validTransitions[currentStatus]?.includes(targetStatus) || false;
+  };
+
+  const getStatusTransitionWarning = (currentStatus, targetStatus) => {
+    if (currentStatus === 'checked_out' && (targetStatus === 'active' || targetStatus === 'checked_in')) {
+      return '⚠️ Advertencia: Estás revirtiendo un check-out. Esto afectará las tareas de limpieza.';
+    }
+    if (currentStatus === 'cancelled' && targetStatus === 'active') {
+      return '⚠️ Advertencia: Estás reactivando una reserva cancelada.';
+    }
+    if (currentStatus === 'no_show' && targetStatus === 'active') {
+      return '⚠️ Advertencia: Estás reactivando una reserva marcada como No Show.';
+    }
+    return null;
+  };
+
+  const confirmStatusChange = async () => {
+    if (!newStatus || !statusChangeReservation) return;
+
+    try {
+      await dispatch(updateReservation({
+        id: statusChangeReservation.id,
+        data: { status: newStatus }
+      })).unwrap();
+
+      toast.success(`Estado actualizado a ${getStatusLabel(newStatus)}`);
+      setShowStatusModal(false);
+      setStatusChangeReservation(null);
+      setNewStatus('');
+      dispatch(fetchReservations());
+      fetchCleaningTasks();
+    } catch (error) {
+      toast.error('Error al actualizar estado');
+    }
+  };
+
+  const confirmStatusChangeFromEdit = async () => {
+    if (!pendingFormData || !editingReservation) return;
+
+    try {
+      await dispatch(updateReservation({
+        id: editingReservation.id,
+        data: pendingFormData
+      })).unwrap();
+
+      toast.success('Reserva actualizada correctamente');
+      setShowStatusConfirmFromEdit(false);
+      setPendingFormData(null);
+      setShowModal(false);
+      resetForm();
+      dispatch(fetchReservations());
+      fetchCleaningTasks();
+    } catch (error) {
+      // Error already handled
+    }
+  };
+
   const confirmCheckin = async () => {
     try {
       const now = new Date();
@@ -589,6 +666,14 @@ export default function Reservations() {
 
     try {
       if (editingReservation) {
+        // Detect status change
+        if (formData.status !== editingReservation.status) {
+          // Show confirmation modal
+          setPendingFormData(formData);
+          setShowStatusConfirmFromEdit(true);
+          return;
+        }
+
         await dispatch(updateReservation({ id: editingReservation.id, data: formData })).unwrap();
         toast.success('Reserva actualizada correctamente');
       } else {
@@ -1074,6 +1159,17 @@ export default function Reservations() {
                               title="Reportar Check-out"
                             >
                               <LogOut className="w-5 h-5" />
+                            </button>
+                          )}
+
+                          {/* Quick status change button - only show for active, checked_in, checked_out */}
+                          {['active', 'checked_in', 'checked_out'].includes(reservation.status) && (
+                            <button
+                              onClick={() => handleStatusChange(reservation)}
+                              className="p-2 text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
+                              title="Cambiar Estado"
+                            >
+                              <RefreshCw className="w-5 h-5" />
                             </button>
                           )}
 
@@ -1667,6 +1763,146 @@ export default function Reservations() {
                 >
                   <Trash2 className="w-4 h-4" />
                   Sí, cancelar reserva
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Status Change Modal */}
+      {showStatusModal && statusChangeReservation && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="fixed inset-0 bg-black bg-opacity-50" onClick={() => setShowStatusModal(false)} />
+          <div className="flex items-center justify-center min-h-screen p-4">
+            <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-bold text-gray-900">Cambiar Estado de Reserva</h2>
+                <button onClick={() => setShowStatusModal(false)} className="text-gray-400 hover:text-gray-600">
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div className="p-4 bg-gray-50 rounded-lg">
+                  <p className="text-sm text-gray-700">
+                    <span className="font-semibold">Propiedad:</span> {statusChangeReservation.property_name}
+                  </p>
+                  <p className="text-sm text-gray-700 mt-1">
+                    <span className="font-semibold">Estado actual:</span> {' '}
+                    <span className={`px-2 py-1 rounded text-xs font-medium ${getStatusColor(statusChangeReservation.status)}`}>
+                      {getStatusLabel(statusChangeReservation.status)}
+                    </span>
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Nuevo Estado *
+                  </label>
+                  <select
+                    value={newStatus}
+                    onChange={(e) => setNewStatus(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                    required
+                  >
+                    <option value="">Seleccione un estado...</option>
+                    {['active', 'checked_in', 'checked_out', 'cancelled', 'no_show']
+                      .filter(status => isValidStatusTransition(statusChangeReservation.status, status))
+                      .map(status => (
+                        <option key={status} value={status}>
+                          {getStatusLabel(status)}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+
+                {newStatus && getStatusTransitionWarning(statusChangeReservation.status, newStatus) && (
+                  <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                    <p className="text-sm text-yellow-800">
+                      {getStatusTransitionWarning(statusChangeReservation.status, newStatus)}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-6 flex gap-3">
+                <button
+                  onClick={() => setShowStatusModal(false)}
+                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={confirmStatusChange}
+                  disabled={!newStatus}
+                  className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  Cambiar Estado
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Status Change Confirmation from Edit Modal */}
+      {showStatusConfirmFromEdit && pendingFormData && editingReservation && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="fixed inset-0 bg-black bg-opacity-50" onClick={() => setShowStatusConfirmFromEdit(false)} />
+          <div className="flex items-center justify-center min-h-screen p-4">
+            <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-bold text-gray-900">Confirmar Cambio de Estado</h2>
+                <button onClick={() => setShowStatusConfirmFromEdit(false)} className="text-gray-400 hover:text-gray-600">
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                  <p className="text-sm text-gray-700">
+                    Estás cambiando el estado de la reserva de{' '}
+                    <span className={`px-2 py-1 rounded text-xs font-medium ${getStatusColor(editingReservation.status)}`}>
+                      {getStatusLabel(editingReservation.status)}
+                    </span>
+                    {' '}a{' '}
+                    <span className={`px-2 py-1 rounded text-xs font-medium ${getStatusColor(pendingFormData.status)}`}>
+                      {getStatusLabel(pendingFormData.status)}
+                    </span>
+                  </p>
+                </div>
+
+                {getStatusTransitionWarning(editingReservation.status, pendingFormData.status) && (
+                  <div className="p-3 bg-orange-50 border border-orange-300 rounded-lg">
+                    <p className="text-sm text-orange-800">
+                      {getStatusTransitionWarning(editingReservation.status, pendingFormData.status)}
+                    </p>
+                  </div>
+                )}
+
+                <p className="text-sm text-gray-600">
+                  ¿Deseas continuar con este cambio? Se guardarán todos los cambios realizados en el formulario.
+                </p>
+              </div>
+
+              <div className="mt-6 flex gap-3">
+                <button
+                  onClick={() => {
+                    setShowStatusConfirmFromEdit(false);
+                    setPendingFormData(null);
+                  }}
+                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={confirmStatusChangeFromEdit}
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  Sí, guardar cambios
                 </button>
               </div>
             </div>
