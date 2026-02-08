@@ -198,7 +198,11 @@ router.post('/register-tenant', authLimiter, validateRegisterTenant, asyncHandle
     );
 
     if (subdomainCheck.rows.length > 0) {
-      throw new Error('Subdomain already taken');
+      await client.query('ROLLBACK');
+      return res.status(409).json({
+        error: 'Subdomain already taken. Please choose a different subdomain.',
+        field: 'subdomain'
+      });
     }
 
     // Create tenant
@@ -278,6 +282,19 @@ router.post('/register-tenant', authLimiter, validateRegisterTenant, asyncHandle
 
   } catch (error) {
     await client.query('ROLLBACK');
+
+    // Handle specific database errors
+    if (error.code === '23505') {
+      // Unique constraint violation
+      if (error.constraint === 'users_tenant_id_email_key') {
+        return res.status(409).json({ error: 'Email already exists. Please use a different email address.' });
+      }
+      if (error.constraint === 'tenants_subdomain_key') {
+        return res.status(409).json({ error: 'Subdomain already taken. Please choose a different subdomain.' });
+      }
+      return res.status(409).json({ error: 'This information is already registered in the system.' });
+    }
+
     throw error;
   } finally {
     client.release();
