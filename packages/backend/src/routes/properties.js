@@ -82,12 +82,12 @@ router.get('/:id', asyncHandler(async (req, res) => {
   res.json(result.rows[0]);
 }));
 
-// POST /api/properties - Create single property manually
+// POST /api/properties - Create property (single or batch)
 router.post('/', requireRole('admin', 'supervisor'), checkPropertyQuota, asyncHandler(async (req, res) => {
-  const { property_type_id, name, status, notes } = req.body;
+  const { property_type_id, name, status, notes, city, location, quantity, property_names } = req.body;
 
-  if (!property_type_id || !name) {
-    return res.status(400).json({ error: 'property_type_id and name are required' });
+  if (!property_type_id) {
+    return res.status(400).json({ error: 'property_type_id is required' });
   }
 
   // Verify property type exists and belongs to tenant
@@ -100,11 +100,60 @@ router.post('/', requireRole('admin', 'supervisor'), checkPropertyQuota, asyncHa
     return res.status(404).json({ error: 'Property type not found' });
   }
 
+  // BATCH CREATION MODE
+  if (quantity && quantity > 1 && property_names && property_names.length > 0) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const createdProperties = [];
+      const errors = [];
+
+      for (let i = 0; i < property_names.length; i++) {
+        const propName = property_names[i];
+        if (!propName || propName.trim() === '') continue;
+
+        try {
+          const result = await client.query(
+            `INSERT INTO properties (tenant_id, property_type_id, name, status, notes, city, location)
+             VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+            [req.tenantId, property_type_id, propName, status || 'available', notes, city, location]
+          );
+          createdProperties.push(result.rows[0]);
+        } catch (error) {
+          if (error.code === '23505') {
+            errors.push({ name: propName, error: 'Property name already exists' });
+          } else {
+            errors.push({ name: propName, error: error.message });
+          }
+        }
+      }
+
+      await client.query('COMMIT');
+      return res.status(201).json({
+        created: createdProperties,
+        errors: errors,
+        success_count: createdProperties.length,
+        error_count: errors.length
+      });
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  // SINGLE PROPERTY CREATION
+  if (!name) {
+    return res.status(400).json({ error: 'name is required' });
+  }
+
   const result = await pool.query(
-    `INSERT INTO properties (tenant_id, property_type_id, name, status, notes)
-     VALUES ($1, $2, $3, $4, $5)
+    `INSERT INTO properties (tenant_id, property_type_id, name, status, notes, city, location)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
      RETURNING *`,
-    [req.tenantId, property_type_id, name, status || 'available', notes]
+    [req.tenantId, property_type_id, name, status || 'available', notes, city, location]
   );
 
   res.status(201).json(result.rows[0]);
@@ -113,7 +162,7 @@ router.post('/', requireRole('admin', 'supervisor'), checkPropertyQuota, asyncHa
 // PUT /api/properties/:id - Update property
 router.put('/:id', requireRole('admin', 'supervisor'), asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const { property_type_id, name, status, notes, is_active } = req.body;
+  const { property_type_id, name, status, notes, is_active, city, location } = req.body;
 
   const result = await pool.query(
     `UPDATE properties
@@ -122,10 +171,12 @@ router.put('/:id', requireRole('admin', 'supervisor'), asyncHandler(async (req, 
          status = COALESCE($3, status),
          notes = COALESCE($4, notes),
          is_active = COALESCE($5, is_active),
+         city = COALESCE($6, city),
+         location = COALESCE($7, location),
          updated_at = CURRENT_TIMESTAMP
-     WHERE id = $6 AND tenant_id = $7
+     WHERE id = $8 AND tenant_id = $9
      RETURNING *`,
-    [property_type_id, name, status, notes, is_active, id, req.tenantId]
+    [property_type_id, name, status, notes, is_active, city, location, id, req.tenantId]
   );
 
   if (result.rows.length === 0) {

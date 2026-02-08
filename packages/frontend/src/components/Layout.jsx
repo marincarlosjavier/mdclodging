@@ -18,7 +18,9 @@ import {
   FileText,
   DoorOpen,
   Shield,
-  DollarSign
+  DollarSign,
+  Wrench,
+  Sparkles
 } from 'lucide-react';
 import { useState } from 'react';
 import ConfirmModal from './ConfirmModal';
@@ -46,39 +48,67 @@ export default function Layout() {
     ...(hasRole('admin', 'supervisor')
       ? [
           { path: '/occupancy-calendar', label: 'Calendario', icon: Calendar },
-          { path: '/reservations', label: 'Reservas', icon: List },
-          { path: '/checkout-report', label: 'Housekeeping', icon: FileText },
-          { path: '/cleaning-settlements', label: 'Liquidaciones', icon: DollarSign }
+          { path: '/reservations', label: 'Reservas', icon: List }
         ]
       : []),
     { path: '/breakfast-list', label: 'Comedor', icon: Coffee },
-    { path: '/tasks', label: 'Mantenimiento', icon: ListTodo },
+
+    // Housekeeping - ahora es parent con submenú
     ...(hasRole('admin', 'supervisor')
       ? [
           {
-            path: '/property-types',
-            label: 'Tipos de Propiedad',
-            icon: Building2,
+            path: '/checkout-report',
+            label: 'Housekeeping',
+            icon: Sparkles,
             children: [
-              { path: '/properties', label: 'Propiedades', icon: Building2 }
-            ]
-          },
-          { path: '/catalog', label: 'Catálogo', icon: List },
-          { path: '/users', label: 'Usuarios', icon: Users },
-          {
-            path: '/telegram',
-            label: 'Telegram',
-            icon: MessageCircle,
-            children: [
-              { path: '/telegram/permissions', label: 'Permisos', icon: Shield }
+              { path: '/checkout-report', label: 'Reporte de Check-out', icon: DoorOpen },
+              { path: '/cleaning-settlements', label: 'Liquidaciones', icon: DollarSign }
             ]
           }
         ]
       : []),
-    ...(hasRole('admin')
+
+    // Mantenimiento - ahora es parent con submenú
+    {
+      path: '/tasks',
+      label: 'Mantenimiento',
+      icon: Wrench,
+      children: [
+        { path: '/tasks', label: 'Tareas', icon: ListTodo },
+        ...(hasRole('admin', 'supervisor')
+          ? [{ path: '/maintenance-settlements', label: 'Liquidaciones', icon: DollarSign }]
+          : [])
+      ]
+    },
+
+    // Configuración - NUEVO grupo
+    ...(hasRole('admin', 'supervisor')
       ? [
-          { path: '/settings', label: 'Configuración', icon: Settings }
+          {
+            path: '/property-types',
+            label: 'Configuración',
+            icon: Settings,
+            children: [
+              { path: '/property-types', label: 'Tipos de Propiedad', icon: Building2 },
+              { path: '/properties', label: 'Propiedades', icon: Building2 },
+              { path: '/catalog', label: 'Catálogo', icon: List },
+              { path: '/users', label: 'Usuarios', icon: Users },
+              {
+                path: '/telegram',
+                label: 'Telegram',
+                icon: MessageCircle,
+                children: [
+                  { path: '/telegram/permissions', label: 'Permisos', icon: Shield }
+                ]
+              }
+            ]
+          }
         ]
+      : []),
+
+    // Ajustes del Sistema (admin only)
+    ...(hasRole('admin')
+      ? [{ path: '/settings', label: 'Ajustes del Sistema', icon: Settings }]
       : [])
   ];
 
@@ -137,24 +167,50 @@ export default function Layout() {
                   <item.icon size={20} />
                   <span>{item.label}</span>
                 </NavLink>
+
+                {/* Level 1 children */}
                 {item.children && (
                   <div className="ml-4 mt-1 space-y-1">
                     {item.children.map((child) => (
-                      <NavLink
-                        key={child.path}
-                        to={child.path}
-                        onClick={() => setSidebarOpen(false)}
-                        className={({ isActive }) =>
-                          `flex items-center gap-3 px-4 py-2 rounded-lg transition-colors text-sm ${
-                            isActive
-                              ? 'bg-primary-50 text-primary-600 font-medium'
-                              : 'text-gray-600 hover:bg-gray-50'
-                          }`
-                        }
-                      >
-                        <child.icon size={18} />
-                        <span>{child.label}</span>
-                      </NavLink>
+                      <div key={child.path}>
+                        <NavLink
+                          to={child.path}
+                          onClick={() => setSidebarOpen(false)}
+                          className={({ isActive }) =>
+                            `flex items-center gap-3 px-4 py-2 rounded-lg transition-colors text-sm ${
+                              isActive
+                                ? 'bg-primary-50 text-primary-600 font-medium'
+                                : 'text-gray-600 hover:bg-gray-50'
+                            }`
+                          }
+                        >
+                          <child.icon size={18} />
+                          <span>{child.label}</span>
+                        </NavLink>
+
+                        {/* Level 2 children (Telegram dentro de Configuración) */}
+                        {child.children && (
+                          <div className="ml-4 mt-1 space-y-1">
+                            {child.children.map((subChild) => (
+                              <NavLink
+                                key={subChild.path}
+                                to={subChild.path}
+                                onClick={() => setSidebarOpen(false)}
+                                className={({ isActive }) =>
+                                  `flex items-center gap-3 px-4 py-2 rounded-lg transition-colors text-xs ${
+                                    isActive
+                                      ? 'bg-primary-50 text-primary-600 font-medium'
+                                      : 'text-gray-500 hover:bg-gray-50'
+                                  }`
+                                }
+                              >
+                                <subChild.icon size={16} />
+                                <span>{subChild.label}</span>
+                              </NavLink>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     ))}
                   </div>
                 )}

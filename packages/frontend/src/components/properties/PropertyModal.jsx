@@ -9,8 +9,14 @@ export default function PropertyModal({ property, propertyTypes, onClose }) {
     property_type_id: '',
     name: '',
     status: 'available',
-    notes: ''
+    notes: '',
+    city: '',
+    location: ''
   });
+
+  const [batchMode, setBatchMode] = useState(false);
+  const [quantity, setQuantity] = useState(1);
+  const [propertyNames, setPropertyNames] = useState(['']);
 
   useEffect(() => {
     if (property) {
@@ -18,7 +24,9 @@ export default function PropertyModal({ property, propertyTypes, onClose }) {
         property_type_id: property.property_type_id || '',
         name: property.name || '',
         status: property.status || 'available',
-        notes: property.notes || ''
+        notes: property.notes || '',
+        city: property.city || '',
+        location: property.location || ''
       });
     }
   }, [property]);
@@ -28,11 +36,66 @@ export default function PropertyModal({ property, propertyTypes, onClose }) {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
+  const handleQuantityChange = (e) => {
+    const num = parseInt(e.target.value) || 1;
+    setQuantity(num);
+    const names = Array(num).fill('').map((_, i) => propertyNames[i] || '');
+    setPropertyNames(names);
+  };
+
+  const handlePropertyNameChange = (index, value) => {
+    const newNames = [...propertyNames];
+    newNames[index] = value;
+    setPropertyNames(newNames);
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!formData.property_type_id || !formData.name) {
-      toast.error('Tipo de propiedad y nombre son requeridos');
+    if (!formData.property_type_id) {
+      toast.error('Tipo de propiedad es requerido');
+      return;
+    }
+
+    // BATCH MODE
+    if (!property && batchMode && quantity > 1) {
+      const filledNames = propertyNames.filter(n => n && n.trim() !== '');
+      if (filledNames.length === 0) {
+        toast.error('Debe ingresar al menos un nombre de propiedad');
+        return;
+      }
+
+      try {
+        setLoading(true);
+        const response = await api.post('/properties', {
+          ...formData,
+          quantity,
+          property_names: filledNames
+        });
+
+        const { success_count, error_count, errors } = response.data;
+
+        if (success_count > 0) {
+          toast.success(`${success_count} propiedades creadas correctamente`);
+        }
+        if (error_count > 0) {
+          errors.forEach(err => {
+            toast.error(`${err.name}: ${err.error}`);
+          });
+        }
+
+        onClose();
+      } catch (error) {
+        toast.error(error.response?.data?.error || 'Error al crear propiedades');
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
+    // SINGLE MODE
+    if (!formData.name) {
+      toast.error('Nombre es requerido');
       return;
     }
 
@@ -99,18 +162,95 @@ export default function PropertyModal({ property, propertyTypes, onClose }) {
               </p>
             </div>
 
-            {/* Name */}
+            {/* Cantidad - solo en crear */}
+            {!property && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  ¿Cuántas propiedades crear?
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="100"
+                  value={quantity}
+                  onChange={(e) => {
+                    const num = parseInt(e.target.value) || 1;
+                    handleQuantityChange(e);
+                    setBatchMode(num > 1);
+                  }}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Si deseas crear múltiples propiedades a la vez, ingresa el número
+                </p>
+              </div>
+            )}
+
+            {/* Nombres batch - solo cuando quantity > 1 */}
+            {!property && batchMode && quantity > 1 && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Nombres de las propiedades *
+                </label>
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {propertyNames.map((name, index) => (
+                    <input
+                      key={index}
+                      type="text"
+                      value={name}
+                      onChange={(e) => handlePropertyNameChange(index, e.target.value)}
+                      placeholder={`Propiedad ${index + 1} (ej: 101, 102, A, B)`}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Nombre único - cuando no es batch */}
+            {(!batchMode || property) && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Nombre/Número *
+                </label>
+                <input
+                  type="text"
+                  name="name"
+                  value={formData.name}
+                  onChange={handleChange}
+                  required
+                  placeholder="Ej: Apto 101, Habitación 205"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
+                />
+              </div>
+            )}
+
+            {/* Ciudad */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Nombre/Número *
+                Ciudad
               </label>
               <input
                 type="text"
-                name="name"
-                value={formData.name}
+                name="city"
+                value={formData.city}
                 onChange={handleChange}
-                required
-                placeholder="Ej: Apto 101, Habitación 205, Casa A"
+                placeholder="Ej: Bogotá, Medellín, Cali"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
+              />
+            </div>
+
+            {/* Locación */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Locación
+              </label>
+              <input
+                type="text"
+                name="location"
+                value={formData.location}
+                onChange={handleChange}
+                placeholder="Nombre de edificio, complejo, etc."
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
               />
             </div>

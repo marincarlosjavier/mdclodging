@@ -13,6 +13,7 @@ import Catalog from './pages/Catalog';
 import Reservations from './pages/Reservations';
 import CleaningTasks from './pages/CleaningTasks';
 import CleaningSettlements from './pages/CleaningSettlements';
+import MaintenanceSettlements from './pages/MaintenanceSettlements';
 import BreakfastList from './pages/BreakfastList';
 import CheckoutReport from './pages/CheckoutReport';
 import CheckinReport from './pages/CheckinReport';
@@ -105,6 +106,14 @@ function App() {
           element={
             <ProtectedRoute allowedRoles={['admin', 'supervisor']}>
               <CleaningSettlements />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="maintenance-settlements"
+          element={
+            <ProtectedRoute allowedRoles={['admin', 'supervisor']}>
+              <MaintenanceSettlements />
             </ProtectedRoute>
           }
         />
