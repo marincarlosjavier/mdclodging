@@ -177,6 +177,20 @@ router.put('/:id', requireSupervisor, validateUpdateUser, asyncHandler(async (re
     }
   }
 
+  // Validate email uniqueness if changing email
+  if (email && email !== current.rows[0].email) {
+    const emailCheck = await pool.query(
+      'SELECT id, email FROM users WHERE email = $1 AND id != $2',
+      [email, id]
+    );
+
+    if (emailCheck.rows.length > 0) {
+      return res.status(409).json({
+        error: 'Este email ya está en uso por otro usuario'
+      });
+    }
+  }
+
   const result = await pool.query(
     `UPDATE users SET
       email = COALESCE($1, email),
